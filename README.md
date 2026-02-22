@@ -169,3 +169,4 @@ GPL-2.0 License - See LICENSE.txt
 
 - Report issues: https://github.com/qtchat/obs-plugin/issues
 - Discussions: https://github.com/qtchat/obs-plugin/discussions
+"# QTChat-OBS-Multi-Chat-Aggregator-Plugin" 
