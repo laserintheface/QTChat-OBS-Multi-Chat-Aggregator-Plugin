@@ -10,36 +10,32 @@ QTChat is an OBS Studio plugin that aggregates Twitch and YouTube chat into a si
 - **Combined View**: See all chats in one unified view, or separate tabs per platform
 - **Easy Setup**: Simple settings dialog for OAuth configuration
 
-## Quick Installation
+## Installation
 
-### Option 1: Windows Installer (Recommended)
+### Step 1: Download
 
-Download the latest installer from the [Releases](https://github.com/qtchat/obs-plugin/releases) page:
+Download `QTChat-1.0.0-win64.zip` from the [Releases](https://github.com/Signal-Six/QTChat-OBS-Multi-Chat-Aggregator-Plugin/releases) page.
 
+### Step 2: Extract
+
+Extract the ZIP file to your OBS plugins folder:
+
+**Standard Installation:**
 ```
-QTChat-Setup-1.0.0-x64.exe
+C:\Program Files\obs-studio\obs-plugins\64bit\
 ```
 
-Run the installer and follow the prompts:
+**Portable Mode:**
+```
+C:\Program Files\obs-studio\portable\obs-plugins\64bit\
+```
 
-1. Welcome screen - Click Next
-2. License Agreement - Accept and click Next
-3. Install Location - Default is recommended, click Next
-4. Click Install
-5. Click Finish to launch OBS
+The extracted folder should contain:
+- `QTChat.dll` - The plugin file
 
-### Option 2: Manual Installation
+### Step 3: Restart OBS
 
-1. Download `QTChat.dll` from the [Releases](https://github.com/qtchat/obs-plugin/releases) page
-2. Copy to your OBS plugins folder:
-   - `C:\Program Files\obs-studio\obs-plugins\64bit\`
-3. Or for portable mode:
-   - `C:\Program Files\obs-studio\portable\obs-plugins\`
-
-## Requirements
-
-- OBS Studio 30.0 or later
-- Windows 10/11 (64-bit)
+Restart OBS Studio. The plugin will load automatically.
 
 ## Usage
 
@@ -60,39 +56,10 @@ Run the installer and follow the prompts:
 4. Click **Save**
 5. The chat dock will appear in OBS
 
-## Building from Source
+## Requirements
 
-### Prerequisites
-
-1. Visual Studio 2022 with C++ development tools
-2. CMake 3.16 or later
-3. Inno Setup 6.x (for installer)
-
-### Build Steps
-
-```bash
-# Clone the repository
-git clone https://github.com/qtchat/obs-plugin.git
-cd obs-plugin
-
-# Create build directory
-mkdir build
-cd build
-
-# Configure with OBS Studio path
-cmake -G "Visual Studio 17 2022" -A x64 ^
-  -DCMAKE_SYSTEM_PROCESSOR=AMD64 ^
-  -DOBS_OUTPUT_DIR="rundir" ..
-
-# Build
-cmake --build . --config Release
-
-# Create installer
-cd ..
-& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\installer.iss
-```
-
-The installer will be created in `dist\QTChat-Setup-1.0.0-x64.exe`
+- OBS Studio 30.0 or later
+- Windows 10/11 (64-bit)
 
 ## Configuration
 
@@ -125,35 +92,36 @@ When streaming to multiple platforms:
 - Verify the DLL is in the correct folder: `obs-plugins\64bit\`
 - Check OBS log for any load errors
 
-## Development
+## Building from Source
 
-### Project Structure
+### Prerequisites
 
+1. Visual Studio 2022 with C++ development tools
+2. CMake 3.16 or later
+3. OBS Studio 30.2 source code
+
+### Build Steps
+
+```bash
+# Clone the repository
+git clone https://github.com/Signal-Six/QTChat-OBS-Multi-Chat-Aggregator-Plugin.git
+cd QTChat-OBS-Multi-Chat-Aggregator-Plugin
+
+# Create build directory
+mkdir build
+cd build
+
+# Configure with OBS Studio path
+cmake -G "Visual Studio 17 2022" -A x64 ^
+  -DCMAKE_SYSTEM_PROCESSOR=AMD64 ^
+  -DOBS_OUTPUT_DIR="rundir" ..
+cmake -S . -B build
+
+# Build
+cmake --build build --config Release
 ```
-QTChat/
-├── src/
-│   ├── plugin-main.cpp      # Plugin entry point
-│   ├── chat-dock.cpp        # Dockable chat UI
-│   ├── chat-manager.cpp     # Chat connection management
-│   ├── chat-message.cpp     # Message data structures
-│   ├── twitch-irc.cpp       # Twitch IRC client
-│   ├── youtube-chat.cpp     # YouTube API client
-│   ├── rtmp-detector.cpp    # RTMP output detection
-│   └── settings-dialog.cpp  # Settings configuration UI
-├── installer/
-│   └── installer.iss        # Inno Setup script
-├── .github/
-│   └── workflows/
-│       └── build.yml        # CI/CD build workflow
-└── CMakeLists.txt           # Build configuration
-```
 
-### Automated Builds
-
-The project uses GitHub Actions for automated builds:
-
-1. On push to `main`: Builds the plugin
-2. On new tag `v*`: Creates a release with installer
+The DLL will be in `build\rundir\obs-plugins\64bit\QTChat.dll`
 
 ## License
 
@@ -167,6 +135,4 @@ GPL-2.0 License - See LICENSE.txt
 
 ## Support
 
-- Report issues: https://github.com/qtchat/obs-plugin/issues
-- Discussions: https://github.com/qtchat/obs-plugin/discussions
-"# QTChat-OBS-Multi-Chat-Aggregator-Plugin" 
+- Report issues: https://github.com/Signal-Six/QTChat-OBS-Multi-Chat-Aggregator-Plugin/issues
