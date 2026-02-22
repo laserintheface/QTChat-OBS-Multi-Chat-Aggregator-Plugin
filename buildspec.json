@@ -1,0 +1,42 @@
+{
+    "dependencies": {
+        "obs-studio": {
+            "version": "30.2",
+            "baseUrl": "https://github.com/obsproject/obs-studio/archive/refs/tags",
+            "label": "OBS sources",
+            "hashes": {
+                "macos": "sha256",
+                "windows-x64": "sha256"
+            }
+        },
+        "prebuilt": {
+            "version": "2024-02-01",
+            "baseUrl": "https://github.com/obsproject/obs-deps/releases/download",
+            "label": "Pre-Built obs-deps",
+            "hashes": {
+                "macos": "sha256",
+                "windows-x64": "sha256"
+            }
+        },
+        "qt6": {
+            "version": "2024-02-01",
+            "baseUrl": "https://github.com/obsproject/obs-deps/releases/download",
+            "label": "Pre-Built Qt6",
+            "hashes": {
+                "macos": "sha256",
+                "windows-x64": "sha256"
+            }
+        }
+    },
+    "platformConfig": {
+        "macos": {
+            "bundleId": "com.qtchat.obs-plugin"
+        }
+    },
+    "name": "QTChat",
+    "displayName": "QTChat - Multi-Chat Aggregator",
+    "version": "1.0.0",
+    "author": "QTChat",
+    "website": "https://github.com/Signal-Six/QTChat-OBS-Multi-Chat-Aggregator-Plugin",
+    "email": "support@qtchat.dev"
+}
