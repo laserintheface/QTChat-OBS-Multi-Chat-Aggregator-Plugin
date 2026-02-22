@@ -53,25 +53,25 @@ jobs:
 
       - name: Build OBS Studio
         run: |
-          $env:OBS_STUDIO_DIR = "$PWD\obs-studio"
-          $env:OBS_DEPS_DIR = "$PWD\obs-deps"
+          $env:OBS_STUDIO_DIR = "$PWD/obs-studio"
+          $env:OBS_DEPS_DIR = "$PWD/obs-deps"
           $env:OBS_OUTPUT_DIR = "rundir"
           $env:CMAKE_PREFIX_PATH = "$env:OBS_DEPS_DIR"
           
           Write-Host "Building OBS Studio..."
           
-          cmake -S "$env:OBS_STUDIO_DIR" -B "$env:OBS_STUDIO_DIR\build" -G "Visual Studio 17 2022" -A x64 -DCMAKE_SYSTEM_PROCESSOR=AMD64 -DCMAKE_PREFIX_PATH="$env:OBS_DEPS_DIR" -DCOVERAGE=OFF -DENABLE_TESTING=OFF -DENABLE_BROWSER=OFF -DENABLE_CAPTIONS=OFF -DENABLE_ENCODER_AOM=OFF -DENABLE_ENCODER_JPEG=OFF -DENABLE_ENCODER_PTHREAD=OFF -DENABLE_ENCODER_SRT=OFF -DENABLE_FFmpeg=OFF -DENABLE_JACK=OFF -DENABLE_MACOS_AUDIO=OFF -DENABLE_MACOS_CAPTURE=OFF -DENABLE_NATIVE_NVENC=OFF -DENABLE_PIPEWIRE=OFF -DENABLE_PORTAUDIO=OFF -DENABLE_QSV=OFF -DENABLE_Rdma=OFF -DENABLE_SCRIPTING=OFF -DENABLE_SKINS=OFF -DENABLE_SNDIO=OFF -DENABLE_SPEECH_RECOGNIZER=OFF -DENABLE_STUDIO_V3D=OFF -DENABLE_TEXT=OFF -DENABLE_TTF=OFF -DENABLE_VCE=OFF -DENABLE_VNC=OFF -DENABLE_WEBRTC=OFF -DENABLE_WINDOWS_CAPTURE=OFF -DOBS_OUTPUT_DIR="$env:OBS_OUTPUT_DIR"
+          cmake -S "$env:OBS_STUDIO_DIR" -B "$env:OBS_STUDIO_DIR/build" -G "Visual Studio 17 2022" -A x64 -DCMAKE_SYSTEM_PROCESSOR=AMD64 -DCMAKE_PREFIX_PATH="$env:OBS_DEPS_DIR" -DCOVERAGE=OFF -DENABLE_TESTING=OFF -DENABLE_BROWSER=OFF -DENABLE_CAPTIONS=OFF -DENABLE_ENCODER_AOM=OFF -DENABLE_ENCODER_JPEG=OFF -DENABLE_ENCODER_PTHREAD=OFF -DENABLE_ENCODER_SRT=OFF -DENABLE_FFmpeg=OFF -DENABLE_JACK=OFF -DENABLE_MACOS_AUDIO=OFF -DENABLE_MACOS_CAPTURE=OFF -DENABLE_NATIVE_NVENC=OFF -DENABLE_PIPEWIRE=OFF -DENABLE_PORTAUDIO=OFF -DENABLE_QSV=OFF -DENABLE_Rdma=OFF -DENABLE_SCRIPTING=OFF -DENABLE_SKINS=OFF -DENABLE_SNDIO=OFF -DENABLE_SPEECH_RECOGNIZER=OFF -DENABLE_STUDIO_V3D=OFF -DENABLE_TEXT=OFF -DENABLE_TTF=OFF -DENABLE_VCE=OFF -DENABLE_VNC=OFF -DENABLE_WEBRTC=OFF -DENABLE_WINDOWS_CAPTURE=OFF -DOBS_OUTPUT_DIR="$env:OBS_OUTPUT_DIR"
           
-          cmake --build "$env:OBS_STUDIO_DIR\build" --config RelWithDebInfo --parallel --target libobs obs-frontend-api
+          cmake --build "$env:OBS_STUDIO_DIR/build" --config RelWithDebInfo --parallel --target libobs obs-frontend-api
 
       - name: Configure Plugin
         run: |
           $workDir = "$PWD"
-          $obsStudioDir = "$workDir\obs-studio"
-          $obsDepsDir = "$workDir\obs-deps"
+          $obsStudioDir = "$workDir/obs-studio"
+          $obsDepsDir = "$workDir/obs-deps"
           
-          $cmakePrefixPath = "$obsDepsDir;$obsStudioDir\build"
-          $cmakeModulePath = "$obsStudioDir\cmake\Modules"
+          $cmakePrefixPath = "$obsDepsDir;$obsStudioDir/build"
+          $cmakeModulePath = "$obsStudioDir/cmake/Modules"
           
           Write-Host "Configuring plugin..."
           
@@ -89,9 +89,9 @@ jobs:
           $outputDir = "release"
           if (!(Test-Path $outputDir)) { New-Item -ItemType Directory -Path $outputDir }
           
-          Copy-Item "build\rundir\obs-plugins\64bit\*.dll" -Destination $outputDir -Force
+          Copy-Item "build/rundir/obs-plugins/64bit/*.dll" -Destination $outputDir -Force
           
-          Compress-Archive -Path "$outputDir\*" -DestinationPath "$pluginName-$pluginVersion-windows-x64-$commitHash.zip" -Force
+          Compress-Archive -Path "$outputDir/*" -DestinationPath "$pluginName-$pluginVersion-windows-x64-$commitHash.zip" -Force
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
