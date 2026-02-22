@@ -18,13 +18,26 @@ jobs:
   build-windows:
     name: Build Windows x64 🪟
     runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Download OBS Studio
+      - name: Set Up Environment 🔧
+        id: setup
+        run: |
+          $BuildSpec = Get-Content -Path buildspec.json -Raw | ConvertFrom-Json
+          $ProductName = $BuildSpec.name
+          $ProductVersion = $BuildSpec.version
+          "pluginName=${ProductName}" >> $env:GITHUB_OUTPUT
+          "pluginVersion=${ProductVersion}" >> $env:GITHUB_OUTPUT
+
+      - name: Download OBS Studio Source
         run: |
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
           $obsVersion = "30.2.2"
@@ -33,7 +46,6 @@ jobs:
           Invoke-WebRequest -Uri $obsUrl -OutFile obs-studio.zip
           Expand-Archive obs-studio.zip -DestinationPath .
           Get-ChildItem -Directory | Where-Object { $_.Name -match "obs-studio" } | Select-Object -First 1 | Rename-Item -NewName "obs-studio"
-        shell: pwsh
 
       - name: Download OBS Dependencies
         run: |
@@ -42,32 +54,53 @@ jobs:
           Write-Host "Downloading OBS dependencies..."
           Invoke-WebRequest -Uri $depsUrl -OutFile obs-deps.zip
           Expand-Archive obs-deps.zip -DestinationPath obs-deps -Force
-        shell: pwsh
 
-      - name: Configure CMake
+      - name: Build OBS Studio 🧱
         run: |
           $env:OBS_STUDIO_DIR = "$PWD\obs-studio"
           $env:OBS_DEPS_DIR = "$PWD\obs-deps"
           $env:OBS_OUTPUT_DIR = "rundir"
+          
+          Write-Host "Building OBS Studio (this may take a while)..."
+          
+          cmake -S "$env:OBS_STUDIO_DIR" -B "$env:OBS_STUDIO_DIR\build" -G "Visual Studio 17 2022" -A x64 -DCMAKE_SYSTEM_PROCESSOR=AMD64 -DCOVERAGE=OFF -DENABLE_TESTING=OFF -DENABLE_AUTOMATED_UPDATES=OFF -DENABLE_BROWSER=OFF -DENABLE_CAPTIONS=OFF -DENABLE_CLANG_TIDY=OFF -DENABLE_CORE_AUDIO_VAAPI=OFF -DENABLE_CRASHHOOKS=OFF -DENABLE_DIRECTSOUND=OFF -DENABLE_ENCODER_AOM=OFF -DENABLE_ENCODER_JPEG=OFF -DENABLE_ENCODER_PTHREAD=OFF -DENABLE_ENCODER_SRT=OFF -DENABLE_FFmpeg=OFF -DENABLE_JACK=OFF -DENABLE_MACOS_AUDIO=OFF -DENABLE_MACOS_CAPTURE=OFF -DENABLE_NATIVE_NVENC=OFF -DENABLE_OBS_PROFILING=OFF -DENABLE_PIPEWIRE=OFF -DENABLE_PORTAUDIO=OFF -DENABLE_QSV=OFF -DENABLE_Rdma=OFF -DENABLE_SCRIPTING=OFF -DENABLE_SKINS=OFF -DENABLE_SNDIO=OFF -DENABLE_SPEECH_RECOGNIZER=OFF -DENABLE_STUDIO_V3D=OFF -DENABLE_TEXT=OFF -DENABLE_TTF=OFF -DENABLE_VCE=OFF -DENABLE_VNC=OFF -DENABLE_WEBRTC=OFF -DENABLE_WIN32_SPEECH=OFF -DENABLE_WINDOWS_CAPTURE=OFF -DOBS_OUTPUT_DIR="$env:OBS_OUTPUT_DIR" -DBUILD_DIR="$env:OBS_STUDIO_DIR\build"
+          
+          cmake --build "$env:OBS_STUDIO_DIR\build" --config RelWithDebInfo --parallel --target libobs obs-frontend-api
+
+      - name: Configure Plugin
+        run: |
+          $env:OBS_STUDIO_DIR = "$PWD\obs-studio"
+          $env:OBS_DEPS_DIR = "$PWD\obs-deps"
+          $env:OBS_OUTPUT_DIR = "rundir"
+          
           Write-Host "OBS Studio: $env:OBS_STUDIO_DIR"
           Write-Host "OBS Deps: $env:OBS_DEPS_DIR"
           
-          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_SYSTEM_PROCESSOR=AMD64 `
-            -DOBS_OUTPUT_DIR="rundir" `
-            -DOBS_STUDIO_DIR="$env:OBS_STUDIO_DIR" `
-            -DOBS_DEPS_DIR="$env:OBS_DEPS_DIR"
-        shell: pwsh
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_SYSTEM_PROCESSOR=AMD64 -DOBS_OUTPUT_DIR="rundir" -DOBS_STUDIO_DIR="$env:OBS_STUDIO_DIR" -DOBS_DEPS_DIR="$env:OBS_DEPS_DIR"
 
       - name: Build Plugin
-        run: cmake --build build --config Release --parallel
-        shell: pwsh
+        run: cmake --build build --config RelWithDebInfo --parallel
 
-      - name: Upload DLL
+      - name: Package Plugin 📀
+        run: |
+          $pluginName = "${{ steps.setup.outputs.pluginName }}"
+          $pluginVersion = "${{ steps.setup.outputs.pluginVersion }}"
+          $commitHash = "${{ github.sha }}".Substring(0, 9)
+          
+          $outputDir = "release"
+          if (!(Test-Path $outputDir)) { New-Item -ItemType Directory -Path $outputDir }
+          
+          Copy-Item "build\rundir\obs-plugins\64bit\*.dll" -Destination $outputDir -Force
+          
+          Compress-Archive -Path "$outputDir\*" -DestinationPath "$pluginName-$pluginVersion-windows-x64-$commitHash.zip" -Force
+
+      - name: Upload Artifacts 📡
         uses: actions/upload-artifact@v4
         with:
-          name: QTChat-DLL
-          path: build\rundir\obs-plugins\64bit\QTChat.dll
+          name: ${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-windows-x64-${{ github.sha }}
+          path: |
+            ${{ github.workspace }}/release/*.zip
+            ${{ github.workspace }}/build/rundir/obs-plugins/64bit/*.dll
 
   release:
     name: Create Release 🛫
@@ -78,16 +111,19 @@ jobs:
       contents: write
 
     steps:
-      - name: Download DLL
+      - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: QTChat-DLL
           path: .
+          pattern: ${{ steps.setup.outputs.pluginName }}-*
+          merge-multiple: true
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           draft: true
-          files: QTChat.dll
+          files: |
+            *.zip
+            *.dll
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
