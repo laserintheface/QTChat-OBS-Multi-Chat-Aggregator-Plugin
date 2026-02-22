@@ -1,119 +1,128 @@
-name: Push
-run-name: ${{ github.ref_name }} push run 🚀
+name: Build
+
 on:
   push:
     branches:
-      - master
       - main
-      - 'release/**'
     tags:
       - '*'
+  pull_request:
+    branches:
+      - main
+
 permissions:
-  contents: write
+  contents: read
+
 jobs:
-  check-format:
-    name: Check Formatting 🔍
-    if: github.ref_name == 'master' || github.ref_name == 'main'
-    uses: ./.github/workflows/check-format.yaml
-    permissions:
-      contents: read
-
-  build-project:
-    name: Build Project 🧱
-    uses: ./.github/workflows/build-project.yaml
-    secrets: inherit
-    permissions:
-      contents: read
-
-  create-release:
-    name: Create Release 🛫
-    if: github.ref_type == 'tag'
-    runs-on: ubuntu-24.04
-    needs: build-project
+  build-windows:
+    name: Build Windows x64
+    runs-on: windows-2022
     defaults:
       run:
-        shell: bash
+        shell: pwsh
+
     steps:
-      - name: Check Release Tag ☑️
-        id: check
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set Up Environment
+        id: setup
         run: |
-          : Check Release Tag ☑️
-          if [[ "${RUNNER_DEBUG}" ]]; then set -x; fi
-          shopt -s extglob
+          $BuildSpec = Get-Content -Path buildspec.json -Raw | ConvertFrom-Json
+          $ProductName = $BuildSpec.name
+          $ProductVersion = $BuildSpec.version
+          "pluginName=${ProductName}" >> $env:GITHUB_OUTPUT
+          "pluginVersion=${ProductVersion}" >> $env:GITHUB_OUTPUT
 
-          case "${GITHUB_REF_NAME}" in
-            +([0-9]).+([0-9]).+([0-9]) )
-              echo 'validTag=true' >> $GITHUB_OUTPUT
-              echo 'prerelease=false' >> $GITHUB_OUTPUT
-              echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
-              ;;
-            +([0-9]).+([0-9]).+([0-9])-@(beta|rc)*([0-9]) )
-              echo 'validTag=true' >> $GITHUB_OUTPUT
-              echo 'prerelease=true' >> $GITHUB_OUTPUT
-              echo "version=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
-              ;;
-            *) echo 'validTag=false' >> $GITHUB_OUTPUT ;;
-          esac
+      - name: Clone OBS Studio Source
+        run: |
+          $obsVersion = "31.0.3"
+          Write-Host "Cloning OBS Studio $obsVersion with submodules..."
+          git clone --depth=1 --branch $obsVersion --recurse-submodules https://github.com/obsproject/obs-studio.git obs-studio
 
-      - name: Download Build Artifacts 📥
+      - name: Download OBS Dependencies
+        run: |
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          $obsDepsVersion = "2025-08-23"
+          $obsDepsUrl = "https://github.com/obsproject/obs-deps/releases/download/${obsDepsVersion}/windows-deps-${obsDepsVersion}-x64.zip"
+          Write-Host "Downloading OBS dependencies ${obsDepsVersion}..."
+          Invoke-WebRequest -Uri $obsDepsUrl -OutFile obs-deps.zip
+          Expand-Archive obs-deps.zip -DestinationPath obs-deps -Force
+
+      - name: Build OBS Studio
+        run: |
+          $env:OBS_STUDIO_DIR = "$PWD\obs-studio"
+          $env:OBS_DEPS_DIR = "$PWD\obs-deps"
+          $env:OBS_OUTPUT_DIR = "rundir"
+          $env:CMAKE_PREFIX_PATH = "$env:OBS_DEPS_DIR"
+          
+          Write-Host "Building OBS Studio..."
+          
+          cmake -S "$env:OBS_STUDIO_DIR" -B "$env:OBS_STUDIO_DIR\build" -G "Visual Studio 17 2022" -A x64 -DCMAKE_SYSTEM_PROCESSOR=AMD64 -DCMAKE_PREFIX_PATH="$env:OBS_DEPS_DIR" -DCOVERAGE=OFF -DENABLE_TESTING=OFF -DENABLE_BROWSER=OFF -DENABLE_CAPTIONS=OFF -DENABLE_ENCODER_AOM=OFF -DENABLE_ENCODER_JPEG=OFF -DENABLE_ENCODER_PTHREAD=OFF -DENABLE_ENCODER_SRT=OFF -DENABLE_FFmpeg=OFF -DENABLE_JACK=OFF -DENABLE_MACOS_AUDIO=OFF -DENABLE_MACOS_CAPTURE=OFF -DENABLE_NATIVE_NVENC=OFF -DENABLE_PIPEWIRE=OFF -DENABLE_PORTAUDIO=OFF -DENABLE_QSV=OFF -DENABLE_Rdma=OFF -DENABLE_SCRIPTING=OFF -DENABLE_SKINS=OFF -DENABLE_SNDIO=OFF -DENABLE_SPEECH_RECOGNIZER=OFF -DENABLE_STUDIO_V3D=OFF -DENABLE_TEXT=OFF -DENABLE_TTF=OFF -DENABLE_VCE=OFF -DENABLE_VNC=OFF -DENABLE_WEBRTC=OFF -DENABLE_WINDOWS_CAPTURE=OFF -DOBS_OUTPUT_DIR="$env:OBS_OUTPUT_DIR"
+          
+          cmake --build "$env:OBS_STUDIO_DIR\build" --config RelWithDebInfo --parallel --target libobs obs-frontend-api
+
+      - name: Configure Plugin
+        run: |
+          $workDir = "$PWD"
+          $obsStudioDir = "$workDir\obs-studio"
+          $obsDepsDir = "$workDir\obs-deps"
+          
+          $cmakePrefixPath = "$obsDepsDir;$obsStudioDir\build"
+          $cmakeModulePath = "$obsStudioDir\cmake\Modules"
+          
+          Write-Host "Configuring plugin..."
+          
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_SYSTEM_PROCESSOR=AMD64 -DOBS_OUTPUT_DIR="rundir" -DOBS_STUDIO_DIR="$obsStudioDir" -DOBS_DEPS_DIR="$obsDepsDir" -DCMAKE_PREFIX_PATH="$cmakePrefixPath" -DCMAKE_MODULE_PATH="$cmakeModulePath"
+
+      - name: Build Plugin
+        run: cmake --build build --config RelWithDebInfo --parallel
+
+      - name: Package Plugin
+        run: |
+          $pluginName = "${{ steps.setup.outputs.pluginName }}"
+          $pluginVersion = "${{ steps.setup.outputs.pluginVersion }}"
+          $commitHash = "${{ github.sha }}".Substring(0, 9)
+          
+          $outputDir = "release"
+          if (!(Test-Path $outputDir)) { New-Item -ItemType Directory -Path $outputDir }
+          
+          Copy-Item "build\rundir\obs-plugins\64bit\*.dll" -Destination $outputDir -Force
+          
+          Compress-Archive -Path "$outputDir\*" -DestinationPath "$pluginName-$pluginVersion-windows-x64-$commitHash.zip" -Force
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.setup.outputs.pluginName }}-${{ steps.setup.outputs.pluginVersion }}-windows-x64-${{ github.sha }}
+          path: |
+            ${{ github.workspace }}/release/*.zip
+            ${{ github.workspace }}/build/rundir/obs-plugins/64bit/*.dll
+
+  release:
+    name: Create Release
+    needs: build-windows
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Artifacts
         uses: actions/download-artifact@v4
-        if: fromJSON(steps.check.outputs.validTag)
-        id: download
+        with:
+          path: .
+          pattern: ${{ steps.setup.outputs.pluginName }}-*
+          merge-multiple: true
 
-      - name: Rename Files 🏷️
-        if: fromJSON(steps.check.outputs.validTag)
-        run: |
-          : Rename Files 🏷️
-          if [[ "${RUNNER_DEBUG}" ]]; then set -x; fi
-          shopt -s extglob
-          shopt -s nullglob
-
-          root_dir="$(pwd)"
-          commit_hash="${GITHUB_SHA:0:9}"
-
-          variants=(
-            'windows-x64;zip|exe'
-            'macos-universal;tar.xz|pkg'
-            'ubuntu-24.04-x86_64;tar.xz|deb|ddeb'
-            'sources;tar.xz'
-          )
-
-          for variant_data in "${variants[@]}"; do
-            IFS=';' read -r variant suffix <<< "${variant_data}"
-
-            candidates=(*-${variant}-${commit_hash}/@(*|*-dbgsym).@(${suffix}))
-
-            for candidate in "${candidates[@]}"; do
-              mv "${candidate}" "${root_dir}"
-            done
-          done
-
-      - name: Generate Checksums 🪪
-        if: fromJSON(steps.check.outputs.validTag)
-        run: |
-          : Generate Checksums 🪪
-          if [[ "${RUNNER_DEBUG}" ]]; then set -x; fi
-          shopt -s extglob
-
-          echo "### Checksums" > ${{ github.workspace }}/CHECKSUMS.txt
-          for file in ${{ github.workspace }}/@(*.exe|*.deb|*.ddeb|*.pkg|*.tar.xz|*.zip); do
-            echo "    ${file##*/}: $(sha256sum "${file}" | cut -d " " -f 1)" >> ${{ github.workspace }}/CHECKSUMS.txt
-          done
-
-      - name: Create Release 🛫
-        if: fromJSON(steps.check.outputs.validTag)
-        id: create_release
-        uses: softprops/action-gh-release@9d7c94cfd0a1f3ed45544c887983e9fa900f0564
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
         with:
           draft: true
-          prerelease: ${{ fromJSON(steps.check.outputs.prerelease) }}
-          tag_name: ${{ steps.check.outputs.version }}
-          name: ${{ needs.build-project.outputs.pluginName }} ${{ steps.check.outputs.version }}
-          body_path: ${{ github.workspace }}/CHECKSUMS.txt
           files: |
-            ${{ github.workspace }}/*.exe
-            ${{ github.workspace }}/*.zip
-            ${{ github.workspace }}/*.pkg
-            ${{ github.workspace }}/*.deb
-            ${{ github.workspace }}/*.ddeb
-            ${{ github.workspace }}/*.tar.xz
+            *.zip
+            *.dll
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
