@@ -13,37 +13,43 @@ on:
 jobs:
   build-windows:
     name: Build Windows x64
-    runs-on: windows-latest
+    runs-on: windows-2022
+    
+    env:
+      OBS_VERSION: "30.0"
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          submodules: recursive
+          fetch-depth: 1
       
-      - name: Setup CMake
-        uses: awalsh128/cache-apt-pkgs-action@latest
+      - name: Setup Visual Studio
+        uses: egor-tensin/setup-msvc@v4
         with:
-          packages: cmake mingw-w64
-          version: 1.0
+          arch: x64
       
-      - name: Clone OBS Studio dependencies
+      - name: Clone OBS Studio and dependencies
         run: |
-          git clone --depth=1 --branch 30.0 https://github.com/obsproject/obs-deps.git ../obs-deps
-          git clone --depth=1 --branch 30.0 https://github.com/obsproject/obs-studio.git ../obs-studio
+          # Clone OBS Studio source for headers
+          git clone --depth=1 --branch $env:OBS_VERSION https://github.com/obsproject/obs-studio.git "$env:GITHUB_WORKSPACE\obs-studio"
+          
+          # Clone OBS dependencies for prebuilt libraries  
+          git clone --depth=1 --branch $env:OBS_VERSION https://github.com/obsproject/obs-deps.git "$env:GITHUB_WORKSPACE\obs-deps"
         shell: pwsh
       
-      - name: Configure CMake
+      - name: Configure and Build
         run: |
+          $env:OBS_SOURCE_DIR = "$env:GITHUB_WORKSPACE\obs-studio"
+          $env:OBS_DEPS_DIR = "$env:GITHUB_WORKSPACE\obs-deps\windows_build_64bit"
+          
           cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
             -DCMAKE_SYSTEM_PROCESSOR=AMD64 `
             -DOBS_OUTPUT_DIR="rundir" `
-            -DCPACK_BINARY_INNO=ON
-        shell: pwsh
-      
-      - name: Build Plugin
-        run: cmake --build build --config Release --parallel
+            -DOBS_SOURCE_DIR="$env:OBS_SOURCE_DIR" `
+            -DOBS_DEPS_DIR="$env:OBS_DEPS_DIR"
+          
+          cmake --build build --config Release --parallel
         shell: pwsh
       
       - name: Download Inno Setup
@@ -53,8 +59,8 @@ jobs:
       
       - name: Create Installer
         run: |
-          ./innosetup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="C:\inno"
-          & "C:\inno\ISCC.exe" installer\installer.iss
+          .\innosetup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="C:\inno"
+          & "C:\inno\ISCC.exe" ".\installer\installer.iss"
         shell: pwsh
       
       - name: Upload Installer
