@@ -1,0 +1,64 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build Windows x64
+    runs-on: windows-2022
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      
+      - name: Download OBS Studio
+        run: |
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          $obsVersion = "30.2.2"
+          $obsUrl = "https://github.com/obsproject/obs-studio/archive/refs/tags/$obsVersion.zip"
+          Write-Host "Downloading OBS Studio $obsVersion..."
+          Invoke-WebRequest -Uri $obsUrl -OutFile obs-studio.zip
+          Expand-Archive obs-studio.zip -DestinationPath . -Force
+          Get-ChildItem -Directory -Filter "obs-studio*" | Select-Object -First 1 | Rename-Item -NewName "obs-studio"
+        shell: pwsh
+      
+      - name: Download OBS Dependencies
+        run: |
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          $depsUrl = "https://github.com/obsproject/obs-deps/releases/download/2024-09-12/windows-deps-2024-09-12-x64.zip"
+          Write-Host "Downloading OBS dependencies..."
+          Invoke-WebRequest -Uri $depsUrl -OutFile obs-deps.zip
+          Expand-Archive obs-deps.zip -DestinationPath obs-deps -Force
+        shell: pwsh
+      
+      - name: Configure CMake
+        run: |
+          $env:OBS_STUDIO_DIR = "$PWD\obs-studio"
+          $env:OBS_DEPS_DIR = "$PWD\obs-deps"
+          
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_SYSTEM_PROCESSOR=AMD64 `
+            -DOBS_OUTPUT_DIR="rundir" `
+            -DOBS_STUDIO_DIR="$env:OBS_STUDIO_DIR" `
+            -DOBS_DEPS_DIR="$env:OBS_DEPS_DIR"
+        shell: pwsh
+      
+      - name: Build
+        run: cmake --build build --config Release --parallel
+        shell: pwsh
+      
+      - name: Upload DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: QTChat
+          path: build\rundir\obs-plugins\64bit\QTChat.dll
