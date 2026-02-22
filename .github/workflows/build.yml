@@ -16,7 +16,7 @@ jobs:
     runs-on: windows-2022
     
     env:
-      OBS_VERSION: "30.0"
+      OBS_VERSION: "master"
     
     steps:
       - name: Checkout code
