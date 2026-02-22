@@ -27,6 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          submodules: recursive
 
       - name: Set Up Environment 🔧
         id: setup
@@ -40,7 +41,7 @@ jobs:
       - name: Download OBS Studio Source
         run: |
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          $obsVersion = "30.2.2"
+          $obsVersion = "31.0.3"
           $obsUrl = "https://github.com/obsproject/obs-studio/archive/refs/tags/$obsVersion.zip"
           Write-Host "Downloading OBS Studio $obsVersion..."
           Invoke-WebRequest -Uri $obsUrl -OutFile obs-studio.zip
@@ -50,9 +51,10 @@ jobs:
       - name: Download OBS Dependencies
         run: |
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          $depsUrl = "https://github.com/obsproject/obs-deps/releases/download/2024-09-12/windows-deps-2024-09-12-x64.zip"
-          Write-Host "Downloading OBS dependencies..."
-          Invoke-WebRequest -Uri $depsUrl -OutFile obs-deps.zip
+          $obsDepsVersion = "2025-08-23"
+          $obsDepsUrl = "https://github.com/obsproject/obs-deps/releases/download/${obsDepsVersion}/windows-deps-${obsDepsVersion}-x64.zip"
+          Write-Host "Downloading OBS dependencies ${obsDepsVersion}..."
+          Invoke-WebRequest -Uri $obsDepsUrl -OutFile obs-deps.zip
           Expand-Archive obs-deps.zip -DestinationPath obs-deps -Force
 
       - name: Build OBS Studio 🧱
@@ -60,10 +62,11 @@ jobs:
           $env:OBS_STUDIO_DIR = "$PWD\obs-studio"
           $env:OBS_DEPS_DIR = "$PWD\obs-deps"
           $env:OBS_OUTPUT_DIR = "rundir"
+          $env:CMAKE_PREFIX_PATH = "$env:OBS_DEPS_DIR"
           
-          Write-Host "Building OBS Studio (this may take a while)..."
+          Write-Host "Building OBS Studio with CMAKE_PREFIX_PATH=$env:CMAKE_PREFIX_PATH"
           
-          cmake -S "$env:OBS_STUDIO_DIR" -B "$env:OBS_STUDIO_DIR\build" -G "Visual Studio 17 2022" -A x64 -DCMAKE_SYSTEM_PROCESSOR=AMD64 -DCOVERAGE=OFF -DENABLE_TESTING=OFF -DENABLE_AUTOMATED_UPDATES=OFF -DENABLE_BROWSER=OFF -DENABLE_CAPTIONS=OFF -DENABLE_CLANG_TIDY=OFF -DENABLE_CORE_AUDIO_VAAPI=OFF -DENABLE_CRASHHOOKS=OFF -DENABLE_DIRECTSOUND=OFF -DENABLE_ENCODER_AOM=OFF -DENABLE_ENCODER_JPEG=OFF -DENABLE_ENCODER_PTHREAD=OFF -DENABLE_ENCODER_SRT=OFF -DENABLE_FFmpeg=OFF -DENABLE_JACK=OFF -DENABLE_MACOS_AUDIO=OFF -DENABLE_MACOS_CAPTURE=OFF -DENABLE_NATIVE_NVENC=OFF -DENABLE_OBS_PROFILING=OFF -DENABLE_PIPEWIRE=OFF -DENABLE_PORTAUDIO=OFF -DENABLE_QSV=OFF -DENABLE_Rdma=OFF -DENABLE_SCRIPTING=OFF -DENABLE_SKINS=OFF -DENABLE_SNDIO=OFF -DENABLE_SPEECH_RECOGNIZER=OFF -DENABLE_STUDIO_V3D=OFF -DENABLE_TEXT=OFF -DENABLE_TTF=OFF -DENABLE_VCE=OFF -DENABLE_VNC=OFF -DENABLE_WEBRTC=OFF -DENABLE_WIN32_SPEECH=OFF -DENABLE_WINDOWS_CAPTURE=OFF -DOBS_OUTPUT_DIR="$env:OBS_OUTPUT_DIR" -DBUILD_DIR="$env:OBS_STUDIO_DIR\build"
+          cmake -S "$env:OBS_STUDIO_DIR" -B "$env:OBS_STUDIO_DIR\build" -G "Visual Studio 17 2022" -A x64 -DCMAKE_SYSTEM_PROCESSOR=AMD64 -DCMAKE_PREFIX_PATH="$env:OBS_DEPS_DIR" -DCOVERAGE=OFF -DENABLE_TESTING=OFF -DENABLE_AUTOMATED_UPDATES=OFF -DENABLE_BROWSER=OFF -DENABLE_CAPTIONS=OFF -DENABLE_CLANG_TIDY=OFF -DENABLE_CRASHHOOKS=OFF -DENABLE_ENCODER_AOM=OFF -DENABLE_ENCODER_JPEG=OFF -DENABLE_ENCODER_PTHREAD=OFF -DENABLE_ENCODER_SRT=OFF -DENABLE_FFmpeg=OFF -DENABLE_JACK=OFF -DENABLE_MACOS_AUDIO=OFF -DENABLE_MACOS_CAPTURE=OFF -DENABLE_NATIVE_NVENC=OFF -DENABLE_OBS_PROFILING=OFF -DENABLE_PIPEWIRE=OFF -DENABLE_PORTAUDIO=OFF -DENABLE_QSV=OFF -DENABLE_Rdma=OFF -DENABLE_SCRIPTING=OFF -DENABLE_SKINS=OFF -DENABLE_SNDIO=OFF -DENABLE_SPEECH_RECOGNIZER=OFF -DENABLE_STUDIO_V3D=OFF -DENABLE_TEXT=OFF -DENABLE_TTF=OFF -DENABLE_VCE=OFF -DENABLE_VNC=OFF -DENABLE_WEBRTC=OFF -DENABLE_WINDOWS_CAPTURE=OFF -DOBS_OUTPUT_DIR="$env:OBS_OUTPUT_DIR"
           
           cmake --build "$env:OBS_STUDIO_DIR\build" --config RelWithDebInfo --parallel --target libobs obs-frontend-api
 

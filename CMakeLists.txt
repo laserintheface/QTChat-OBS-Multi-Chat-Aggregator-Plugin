@@ -11,6 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # OBS paths - can be overridden via environment or command line
 set(OBS_STUDIO_DIR "$ENV{OBS_STUDIO_DIR}" CACHE PATH "Path to OBS Studio build directory")
 set(OBS_DEPS_DIR "$ENV{OBS_DEPS_DIR}" CACHE PATH "Path to OBS dependencies directory")
+set(CMAKE_PREFIX_PATH "$ENV{CMAKE_PREFIX_PATH};${CMAKE_PREFIX_PATH}" CACHE PATH "CMake prefix path for OBS")
 
 # OBS output directory
 set(OBS_OUTPUT_DIR "$ENV{OBS_OUTPUT_DIR}" CACHE PATH "OBS output directory")
@@ -18,19 +19,22 @@ if(NOT OBS_OUTPUT_DIR)
     set(OBS_OUTPUT_DIR "rundir")
 endif()
 
-# Find OBS
+# Find OBS - check multiple possible locations
 find_package(libobs QUIET)
-if(NOT libobs_FOUND AND OBS_STUDIO_DIR)
-    find_package(libobs REQUIRED PATHS "${OBS_STUDIO_DIR}/build" "${OBS_DEPS_DIR}")
+
+if(NOT libobs_FOUND)
+    # Try OBS Studio build directory and CMAKE_PREFIX_PATH
+    set(_OBS_SEARCH_PATHS "${OBS_STUDIO_DIR}/build" "${OBS_DEPS_DIR}" "${CMAKE_PREFIX_PATH}")
+    find_package(libobs REQUIRED PATHS ${_OBS_SEARCH_PATHS})
 endif()
-find_package(libobs REQUIRED)
 
 # Find OBS frontend API
 find_package(obs-frontend-api QUIET)
-if(NOT obs-frontend-api_FOUND AND OBS_STUDIO_DIR)
-    find_package(obs-frontend-api REQUIRED PATHS "${OBS_STUDIO_DIR}/build" "${OBS_DEPS_DIR}")
+
+if(NOT obs-frontend-api_FOUND)
+    set(_OBS_SEARCH_PATHS "${OBS_STUDIO_DIR}/build" "${OBS_DEPS_DIR}" "${CMAKE_PREFIX_PATH}")
+    find_package(obs-frontend-api REQUIRED PATHS ${_OBS_SEARCH_PATHS})
 endif()
-find_package(obs-frontend-api REQUIRED)
 
 # Find Qt6
 find_package(Qt6 COMPONENTS Widgets Core Network QUIET)
