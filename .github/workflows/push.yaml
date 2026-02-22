@@ -27,7 +27,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          submodules: recursive
 
       - name: Set Up Environment 🔧
         id: setup
@@ -38,15 +37,11 @@ jobs:
           "pluginName=${ProductName}" >> $env:GITHUB_OUTPUT
           "pluginVersion=${ProductVersion}" >> $env:GITHUB_OUTPUT
 
-      - name: Download OBS Studio Source
+      - name: Clone OBS Studio Source
         run: |
-          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
           $obsVersion = "31.0.3"
-          $obsUrl = "https://github.com/obsproject/obs-studio/archive/refs/tags/$obsVersion.zip"
-          Write-Host "Downloading OBS Studio $obsVersion..."
-          Invoke-WebRequest -Uri $obsUrl -OutFile obs-studio.zip
-          Expand-Archive obs-studio.zip -DestinationPath .
-          Get-ChildItem -Directory | Where-Object { $_.Name -match "obs-studio" } | Select-Object -First 1 | Rename-Item -NewName "obs-studio"
+          Write-Host "Cloning OBS Studio $obsVersion with submodules..."
+          git clone --depth=1 --branch $obsVersion --recurse-submodules https://github.com/obsproject/obs-studio.git obs-studio
 
       - name: Download OBS Dependencies
         run: |
