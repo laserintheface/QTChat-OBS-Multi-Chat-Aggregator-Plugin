@@ -25,7 +25,7 @@ jobs:
           fetch-depth: 1
       
       - name: Setup Visual Studio
-        uses: egor-tensin/setup-msvc@v4
+        uses: azure/setup-msvc@v1
         with:
           arch: x64
       
