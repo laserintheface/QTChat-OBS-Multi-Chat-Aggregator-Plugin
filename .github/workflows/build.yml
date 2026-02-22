@@ -24,11 +24,6 @@ jobs:
         with:
           fetch-depth: 1
       
-      - name: Setup Visual Studio
-        uses: azure/setup-msvc@v1
-        with:
-          arch: x64
-      
       - name: Clone OBS Studio and dependencies
         run: |
           # Clone OBS Studio source for headers
