@@ -12,13 +12,30 @@ QTChat is an OBS Studio plugin that aggregates Twitch and YouTube chat into a si
 
 ## Installation
 
-### Quick Install
+### Step 1: Download
 
-1. Download `QTChat.dll` from the [Releases](https://github.com/Signal-Six/QTChat-OBS-Multi-Chat-Aggregator-Plugin/releases) page
-2. Copy the DLL to your OBS plugins folder:
-   - Standard: `C:\Program Files\obs-studio\obs-plugins\64bit\`
-   - Portable: `C:\Program Files\obs-studio\portable\obs-plugins\64bit\`
-3. Restart OBS Studio
+Download `QTChat-1.0.0-win64.zip` from the [Releases](https://github.com/Signal-Six/QTChat-OBS-Multi-Chat-Aggregator-Plugin/releases) page.
+
+### Step 2: Extract
+
+Extract the ZIP file to your OBS plugins folder:
+
+**Standard Installation:**
+```
+C:\Program Files\obs-studio\obs-plugins\64bit\
+```
+
+**Portable Mode:**
+```
+C:\Program Files\obs-studio\portable\obs-plugins\64bit\
+```
+
+The extracted folder should contain:
+- `QTChat.dll` - The plugin file
+
+### Step 3: Restart OBS
+
+Restart OBS Studio. The plugin will load automatically.
 
 ## Usage
 
@@ -43,41 +60,6 @@ QTChat is an OBS Studio plugin that aggregates Twitch and YouTube chat into a si
 
 - OBS Studio 30.0 or later
 - Windows 10/11 (64-bit)
-
-## Building from Source
-
-### Prerequisites
-
-1. Visual Studio 2022 with C++ development tools
-2. CMake 3.16 or later
-3. OBS Studio 30.2 source code
-4. OBS dependencies (prebuilt)
-
-### Build Steps
-
-```bash
-# Clone the repository
-git clone https://github.com/Signal-Six/QTChat-OBS-Multi-Chat-Aggregator-Plugin.git
-cd QTChat-OBS-Multi-Chat-Aggregator-Plugin
-
-# Download OBS Studio source
-curl -L -o obs-studio.zip https://github.com/obsproject/obs-studio/archive/refs/tags/30.2.2.zip
-unzip obs-studio.zip
-mv obs-studio-30.2.2 obs-studio
-
-# Download OBS dependencies
-curl -L -o obs-deps.zip https://github.com/obsproject/obs-deps/releases/download/2024-09-12/windows-deps-2024-09-12-x64.zip
-unzip obs-deps.zip
-
-# Build
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64 ^
-  -DOBS_STUDIO_DIR=obs-studio ^
-  -DOBS_DEPS_DIR=obs-deps
-
-cmake --build build --config Release
-```
-
-The DLL will be in `build\rundir\obs-plugins\64bit\QTChat.dll`
 
 ## Configuration
 
@@ -110,16 +92,47 @@ When streaming to multiple platforms:
 - Verify the DLL is in the correct folder: `obs-plugins\64bit\`
 - Check OBS log for any load errors
 
-## Development
+## Building from Source
 
-The project uses GitHub Actions for automated builds. On push to main, the plugin is automatically built and tested.
+### Prerequisites
+
+1. Visual Studio 2022 with C++ development tools
+2. CMake 3.16 or later
+3. OBS Studio 30.2 source code
+
+### Build Steps
+
+```bash
+# Clone the repository
+git clone https://github.com/Signal-Six/QTChat-OBS-Multi-Chat-Aggregator-Plugin.git
+cd QTChat-OBS-Multi-Chat-Aggregator-Plugin
+
+# Create build directory
+mkdir build
+cd build
+
+# Configure with OBS Studio path
+cmake -G "Visual Studio 17 2022" -A x64 ^
+  -DCMAKE_SYSTEM_PROCESSOR=AMD64 ^
+  -DOBS_OUTPUT_DIR="rundir" ..
+cmake -S . -B build
+
+# Build
+cmake --build build --config Release
+```
+
+The DLL will be in `build\rundir\obs-plugins\64bit\QTChat.dll`
 
 ## License
 
-GPL-2.0 License
+GPL-2.0 License - See LICENSE.txt
 
 ## Acknowledgments
 
 - [OBS Studio](https://obsproject.com) - Broadcasting software
 - [Twitch IRC Protocol](https://dev.twitch.tv/docs/irc) - Chat connectivity
 - [YouTube Data API](https://developers.google.com/youtube/v3) - Live chat integration
+
+## Support
+
+- Report issues: https://github.com/Signal-Six/QTChat-OBS-Multi-Chat-Aggregator-Plugin/issues
