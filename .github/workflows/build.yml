@@ -16,7 +16,7 @@ jobs:
     runs-on: windows-2022
     
     env:
-      OBS_VERSION: "master"
+      OBS_VERSION: "30.0.0"
     
     steps:
       - name: Checkout code
@@ -42,7 +42,8 @@ jobs:
             -DCMAKE_SYSTEM_PROCESSOR=AMD64 `
             -DOBS_OUTPUT_DIR="rundir" `
             -DOBS_SOURCE_DIR="$env:OBS_SOURCE_DIR" `
-            -DOBS_DEPS_DIR="$env:OBS_DEPS_DIR"
+            -DOBS_DEPS_DIR="$env:OBS_DEPS_DIR" `
+            -DCMAKE_PREFIX_PATH="$env:OBS_DEPS_DIR;$env:OBS_DEPS_DIR\lib\cmake;$env:GITHUB_WORKSPACE\obs-deps"
           
           cmake --build build --config Release --parallel
         shell: pwsh
