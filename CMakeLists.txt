@@ -1,56 +1,59 @@
 cmake_minimum_required(VERSION 3.16)
 
-if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
-    cmake_policy(SET CMP0048 NEW)
-    project(QTChat VERSION 1.0.0)
-endif()
+# Set project name and version
+project(QTChat VERSION 1.0.0)
 
+# C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Find Qt5
-find_package(Qt5 REQUIRED COMPONENTS Widgets Network)
-
 # OBS paths - can be overridden via environment or command line
-set(OBS_SOURCE_DIR "$ENV{OBS_SOURCE_DIR}" CACHE PATH "Path to OBS Studio source directory")
+set(OBS_STUDIO_DIR "$ENV{OBS_STUDIO_DIR}" CACHE PATH "Path to OBS Studio build directory")
 set(OBS_DEPS_DIR "$ENV{OBS_DEPS_DIR}" CACHE PATH "Path to OBS dependencies directory")
 
-# Try to find OBS if paths are provided
-if(OBS_SOURCE_DIR)
-    set(CMAKE_INCLUDE_PATH "${OBS_SOURCE_DIR}/libobs" "${CMAKE_INCLUDE_PATH}")
-    set(CMAKE_INCLUDE_PATH "${OBS_SOURCE_DIR}/UI/obs-frontend-api" "${CMAKE_INCLUDE_PATH}")
-    set(CMAKE_PREFIX_PATH "${OBS_DEPS_DIR}/lib/cmake" "${CMAKE_PREFIX_PATH}")
-    
-    # Find OBS libraries
-    find_library(OBS_LIB obs-libobs REQUIRED)
-    find_library(OBS_FRONTEND_API libobs-frontend-api REQUIRED)
-    
-    message(STATUS "Found OBS: ${OBS_LIB}")
+# OBS output directory
+set(OBS_OUTPUT_DIR "$ENV{OBS_OUTPUT_DIR}" CACHE PATH "OBS output directory")
+if(NOT OBS_OUTPUT_DIR)
+    set(OBS_OUTPUT_DIR "rundir")
 endif()
 
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ObsPluginHelpers.cmake)
+# Find OBS
+find_package(libobs QUIET)
+if(NOT libobs_FOUND AND OBS_STUDIO_DIR)
+    find_package(libobs REQUIRED PATHS "${OBS_STUDIO_DIR}/build" "${OBS_DEPS_DIR}")
+endif()
+find_package(libobs REQUIRED)
 
-set(QTCHAT_SOURCES
+# Find OBS frontend API
+find_package(obs-frontend-api QUIET)
+if(NOT obs-frontend-api_FOUND AND OBS_STUDIO_DIR)
+    find_package(obs-frontend-api REQUIRED PATHS "${OBS_STUDIO_DIR}/build" "${OBS_DEPS_DIR}")
+endif()
+find_package(obs-frontend-api REQUIRED)
+
+# Find Qt6
+find_package(Qt6 COMPONENTS Widgets Core Network QUIET)
+if(NOT Qt6_FOUND)
+    # Try Qt5 as fallback
+    find_package(Qt5 REQUIRED COMPONENTS Widgets Network)
+    set(USE_QT5 ON)
+endif()
+
+# Plugin sources
+set(PLUGIN_SOURCES
     src/plugin-main.cpp
-    src/plugin-main.h
-    src/chat-dock.h
     src/chat-dock.cpp
-    src/chat-message.h
     src/chat-message.cpp
-    src/twitch-irc.h
     src/twitch-irc.cpp
-    src/youtube-chat.h
     src/youtube-chat.cpp
-    src/rtmp-detector.h
     src/rtmp-detector.cpp
-    src/chat-manager.h
     src/chat-manager.cpp
-    src/settings-dialog.h
     src/settings-dialog.cpp
 )
 
-set(QTCHAT_HEADERS
+# Plugin headers
+set(PLUGIN_HEADERS
     src/plugin-main.h
     src/chat-dock.h
     src/chat-message.h
@@ -61,49 +64,65 @@ set(QTCHAT_HEADERS
     src/settings-dialog.h
 )
 
-set(QTCHAT_DATA
-    data/locale/en-US.ini
-)
-
-compile_resources(QTCHAT_QRC qtchat.qrc ${CMAKE_CURRENT_SOURCE_DIR})
-
+# Add plugin library
 add_library(${CMAKE_PROJECT_NAME} MODULE
-    ${QTCHAT_SOURCES}
-    ${QTCHAT_HEADERS}
-    ${QTCHAT_QRC}
+    ${PLUGIN_SOURCES}
+    ${PLUGIN_HEADERS}
 )
 
-# Link OBS libraries if found, otherwise use find_package
-if(OBS_LIB AND OBS_FRONTEND_API)
+# Include directories
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+# Find OBS include paths
+if(OBS_STUDIO_DIR)
     target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
-        "${OBS_SOURCE_DIR}/libobs"
-        "${OBS_SOURCE_DIR}/UI/obs-frontend-api"
-        "${OBS_DEPS_DIR}/include"
+        "${OBS_STUDIO_DIR}/libobs"
+        "${OBS_STUDIO_DIR}/UI/obs-frontend-api"
     )
-    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
-        "${OBS_LIB}"
-        "${OBS_FRONTEND_API}"
-    )
-else()
-    # Try using OBS CMake targets as fallback
-    find_package(obs-studio 30.0 QUIET)
-    if(OBS_STUDIO_FOUND)
-        target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
-            OBS::libobs
-            OBS::obs-frontend-api
-        )
-    endif()
 endif()
 
+if(OBS_DEPS_DIR)
+    target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
+        "${OBS_DEPS_DIR}/include"
+    )
+endif()
+
+# Link libraries
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
-    Qt5::Widgets
-    Qt5::Network
+    libobs
+    obs-frontend-api
 )
 
-setup_plugin(${CMAKE_PROJECT_NAME} INFO)
+# Link Qt
+if(USE_QT5)
+    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
+        Qt5::Widgets
+        Qt5::Network
+    )
+    target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE QT_DEPRECATED_WARNINGS)
+else()
+    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
+        Qt6::Core
+        Qt6::Widgets
+        Qt6::Network
+    )
+    set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES AUTOMOC ON)
+endif()
 
-target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
-    QT_DEPRECATED_WARNINGS
+# Output configuration
+set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES
+    PREFIX ""
+    OUTPUT_NAME "${CMAKE_PROJECT_NAME}"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${OBS_OUTPUT_DIR}/obs-plugins/64bit"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${OBS_OUTPUT_DIR}/obs-plugins/64bit"
 )
 
-install_plugin(${CMAKE_PROJECT_NAME})
+# Installation
+install(TARGETS ${CMAKE_PROJECT_NAME} RUNTIME DESTINATION "obs-plugins/64bit")
+
+# Windows-specific settings
+if(WIN32)
+    set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES SUFFIX ".dll")
+endif()
