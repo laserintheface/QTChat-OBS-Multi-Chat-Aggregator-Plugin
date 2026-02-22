@@ -67,17 +67,7 @@ jobs:
 
       - name: Configure Plugin
         run: |
-          $env:OBS_STUDIO_DIR = "$PWD\obs-studio"
-          $env:OBS_DEPS_DIR = "$PWD\obs-deps"
-          $env:OBS_OUTPUT_DIR = "rundir"
-          
-          $obsStudioDirUnix = $env:OBS_STUDIO_DIR.Replace('\', '/')
-          $obsDepsDirUnix = $env:OBS_DEPS_DIR.Replace('\', '/')
-          
-          Write-Host "OBS Studio: $env:OBS_STUDIO_DIR"
-          Write-Host "OBS Deps: $env:OBS_DEPS_DIR"
-          
-          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_SYSTEM_PROCESSOR=AMD64 -DOBS_OUTPUT_DIR="rundir" -DOBS_STUDIO_DIR="$env:OBS_STUDIO_DIR" -DOBS_DEPS_DIR="$env:OBS_DEPS_DIR" -DCMAKE_PREFIX_PATH="$obsDepsDirUnix;$obsStudioDirUnix/build" -DCMAKE_MODULE_PATH="$obsStudioDirUnix/cmake/Modules"
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_SYSTEM_PROCESSOR=AMD64 -DOBS_OUTPUT_DIR="rundir" -DOBS_STUDIO_DIR="./obs-studio" -DOBS_DEPS_DIR="./obs-deps" -DCMAKE_PREFIX_PATH="./obs-deps;./obs-studio/build" -DCMAKE_MODULE_PATH="./obs-studio/cmake/Modules"
 
       - name: Build Plugin
         run: cmake --build build --config RelWithDebInfo --parallel
