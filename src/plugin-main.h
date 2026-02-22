@@ -14,37 +14,37 @@ class SettingsDialog;
 
 class QTChatPlugin {
 public:
-    QTChatPlugin();
-    ~QTChatPlugin();
+	QTChatPlugin();
+	~QTChatPlugin();
 
-    static QTChatPlugin* getInstance();
+	static QTChatPlugin *getInstance();
 
-    void load();
-    void unload();
+	void load();
+	void unload();
 
-    ChatManager* getChatManager() const { return m_chatManager.get(); }
-    RTMPDetector* getRTMPDetector() const { return m_rtmpDetector.get(); }
+	ChatManager *getChatManager() const { return m_chatManager.get(); }
+	RTMPDetector *getRTMPDetector() const { return m_rtmpDetector.get(); }
 
 private:
-    void setupDocks();
-    void setupMenu();
-    void onSettingsClicked();
-    void onStreamStarted();
-    void onStreamStopped();
+	void setupDocks();
+	void setupMenu();
+	void onSettingsClicked();
+	void onStreamStarted();
+	void onStreamStopped();
 
-    std::unique_ptr<ChatDock> m_chatDock;
-    std::unique_ptr<ChatManager> m_chatManager;
-    std::unique_ptr<RTMPDetector> m_rtmpDetector;
-    std::unique_ptr<SettingsDialog> m_settingsDialog;
+	std::unique_ptr<ChatDock> m_chatDock;
+	std::unique_ptr<ChatManager> m_chatManager;
+	std::unique_ptr<RTMPDetector> m_rtmpDetector;
+	std::unique_ptr<SettingsDialog> m_settingsDialog;
 
-    QMenu* m_menu = nullptr;
-    QAction* m_settingsAction = nullptr;
-    QAction* m_toggleDockAction = nullptr;
+	QMenu *m_menu = nullptr;
+	QAction *m_settingsAction = nullptr;
+	QAction *m_toggleDockAction = nullptr;
 
-    static QTChatPlugin* s_instance;
+	static QTChatPlugin *s_instance;
 };
 
 bool obs_module_load(void);
 void obs_module_unload(void);
-const char* obs_module_name(void);
-const char* obs_module_description(void);
+const char *obs_module_name(void);
+const char *obs_module_description(void);
