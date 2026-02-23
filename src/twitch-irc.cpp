@@ -3,7 +3,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QColor>
-#include <util/log.h>
+#include <obs-module.h>
 
 static const QMap<QString, QColor> TwitchUsernameColors = {
 	{"Blue", QColor(0, 0, 255)},         {"Coral", QColor(255, 127, 80)},    {"Cyan", QColor(0, 255, 255)},

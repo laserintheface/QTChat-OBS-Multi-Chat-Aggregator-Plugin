@@ -3,8 +3,7 @@
 #include "chat-manager.h"
 #include "rtmp-detector.h"
 #include "settings-dialog.h"
-#include <obs.h>
-#include <util/log.h>
+#include <obs-module.h>
 #include <QMenuBar>
 #include <QMessageBox>
 

@@ -1,5 +1,5 @@
 #include "chat-manager.h"
-#include <util/log.h>
+#include <obs-module.h>
 
 ChatManager::ChatManager(QObject *parent)
 	: QObject(parent),

@@ -1,4 +1,5 @@
 #include "settings-dialog.h"
+#include <obs-module.h>
 #include <QMessageBox>
 #include <QFile>
 #include <QTextStream>

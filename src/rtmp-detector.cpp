@@ -1,6 +1,6 @@
 #include "rtmp-detector.h"
 #include "chat-manager.h"
-#include <util/log.h>
+#include <obs-module.h>
 #include <QUrl>
 
 RTMPDetector::RTMPDetector(QObject *parent) : QObject(parent)

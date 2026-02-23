@@ -58,6 +58,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${libobs_INCLUDE_DIRS}
+  ${obs-frontend-api_INCLUDE_DIRS}
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})

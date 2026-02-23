@@ -1,4 +1,5 @@
 #include "chat-dock.h"
+#include <obs-module.h>
 #include <QScrollBar>
 #include <QFont>
 #include <QColorDialog>
@@ -7,7 +8,7 @@ ChatDock::ChatDock(QWidget *parent) : QDockWidget(obs_module_text("Plugin.Name")
 {
 	setObjectName("qtchat-dock");
 	setAllowedAreas(Qt::AllDockWidgetAreas);
-	setFeatures(QDockWidget::AllDockWidgetFeatures);
+	setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
 
 	QWidget *centralWidget = new QWidget(this);
 	QVBoxLayout *mainLayout = new QVBoxLayout(centralWidget);

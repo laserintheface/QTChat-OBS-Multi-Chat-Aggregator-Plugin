@@ -4,7 +4,7 @@
 #include <QJsonArray>
 #include <QUrl>
 #include <QUrlQuery>
-#include <util/log.h>
+#include <obs-module.h>
 
 YouTubeChat::YouTubeChat(QObject *parent) : QObject(parent)
 {
