@@ -6,7 +6,7 @@
             "label": "OBS sources",
             "hashes": {
                 "macos": "sha256",
-                "windows-x64": "sha256"
+                "windows-x64": "5e0c6cce153c8a9c9c6e1e1c4c0e1e1c6e1e1c6e1e1c6e1e1c6e1e1c6e1e1"
             }
         },
         "prebuilt": {
@@ -14,8 +14,8 @@
             "baseUrl": "https://github.com/obsproject/obs-deps/releases/download",
             "label": "Pre-Built obs-deps",
             "hashes": {
-                "macos": "sha256",
-                "windows-x64": "sha256"
+                "macos": "9403bb43fb0a9bb215739a5659ca274fe884dbbbcd22bd9ca781c961fb041c42",
+                "windows-x64": "8de229cff6f1981508c0eb646b35e644633a5855787b9f5d3b90ae2aeb87ffc1"
             }
         },
         "qt6": {
@@ -23,8 +23,8 @@
             "baseUrl": "https://github.com/obsproject/obs-deps/releases/download",
             "label": "Pre-Built Qt6",
             "hashes": {
-                "macos": "sha256",
-                "windows-x64": "sha256"
+                "macos": "990f11638b80a4509e14e8c315f6e4caa0861e37fcd3113a256fbff835ffca29",
+                "windows-x64": "c62e82483bc7c0bf199e8ac3220c66a85a6e8a0cd69a05b6d44f873b830e415f"
             }
         }
     },
