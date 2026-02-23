@@ -53,7 +53,7 @@ jobs:
 
       - name: Build OBS Studio
         run: |
-          $basePath = (Get-Location).Path -replace '\', '/'
+          $basePath = (Get-Location).Path -replace '\\\\', '/'
           $env:OBS_STUDIO_DIR = "$basePath/obs-studio"
           $env:OBS_DEPS_DIR = "$basePath/obs-deps"
           $env:OBS_OUTPUT_DIR = "rundir"
@@ -67,7 +67,7 @@ jobs:
 
       - name: Configure Plugin
         run: |
-          $basePath = (Get-Location).Path -replace '\', '/'
+          $basePath = (Get-Location).Path -replace '\\\\', '/'
           $obsStudioDir = "$basePath/obs-studio"
           $obsDepsDir = "$basePath/obs-deps"
           
