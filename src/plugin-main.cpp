@@ -4,13 +4,15 @@
 #include "rtmp-detector.h"
 #include "settings-dialog.h"
 #include <obs-module.h>
+#include <obs-frontend-api.h>
 #include <QMenuBar>
 #include <QMessageBox>
 
 QTChatPlugin *QTChatPlugin::s_instance = nullptr;
 
 QTChatPlugin::QTChatPlugin()
-	: m_chatManager(std::make_unique<ChatManager>()),
+	: QObject(),
+	  m_chatManager(std::make_unique<ChatManager>()),
 	  m_rtmpDetector(std::make_unique<RTMPDetector>())
 {
 	s_instance = this;
@@ -39,10 +41,15 @@ void QTChatPlugin::load()
 	setupDocks();
 	setupMenu();
 
-	QObject::connect(m_settingsDialog.get(), &SettingsDialog::settingsSaved, this,
-			 [this]() { m_chatManager->applySettings(); });
+	connect(m_settingsDialog.get(), &SettingsDialog::settingsSaved,
+		this, &QTChatPlugin::applySettings);
 
 	blog(LOG_INFO, "[QTChat] Plugin loaded successfully");
+}
+
+void QTChatPlugin::applySettings()
+{
+	m_chatManager->applySettings();
 }
 
 void QTChatPlugin::unload()
@@ -55,12 +62,12 @@ void QTChatPlugin::unload()
 	}
 
 	if (m_chatDock) {
-		obs_frontend_remove_dock(m_chatDock.get());
+		obs_frontend_remove_dock("qtchat-dock");
 		m_chatDock.reset();
 	}
 
 	if (m_menu) {
-		QMenuBar *menuBar = obs_frontend_get_menu();
+		QMenuBar *menuBar = obs_frontend_get_main_menu();
 		menuBar->removeAction(m_menu->menuAction());
 		delete m_menu;
 		m_menu = nullptr;
@@ -80,28 +87,29 @@ void QTChatPlugin::setupDocks()
 
 void QTChatPlugin::setupMenu()
 {
-	QMenuBar *menuBar = obs_frontend_get_menu();
+	QMenuBar *menuBar = obs_frontend_get_main_menu();
 
 	m_menu = new QMenu(obs_module_text("Plugin.Name"));
 
 	m_settingsAction = new QAction(obs_module_text("Settings.Title"), m_menu);
-	QObject::connect(m_settingsAction, &QAction::triggered, this, &QTChatPlugin::onSettingsClicked);
+	connect(m_settingsAction, &QAction::triggered, this, &QTChatPlugin::onSettingsClicked);
 	m_menu->addAction(m_settingsAction);
 
 	m_toggleDockAction = new QAction(obs_module_text("Chat.Combined"), m_menu);
-	QObject::connect(m_toggleDockAction, &QAction::triggered, this,
-			 [this]() { obs_frontend_toggle_dockVisibility(m_chatDock.get()); });
+	connect(m_toggleDockAction, &QAction::triggered, this, &QTChatPlugin::onToggleDock);
 	m_menu->addAction(m_toggleDockAction);
 
 	menuBar->addMenu(m_menu);
 
 	auto streamOutput = obs_get_output_by_name("simple_output");
 	if (streamOutput) {
-		QObject::connect(obs_output_get_signal_handler(streamOutput), "start", [](void *, calldata_t *params) {
-			QMetaObject::invokeMethod(QTChatPlugin::getInstance(), "onStreamStarted", Qt::QueuedConnection);
+		connect(obs_output_get_signal_handler(streamOutput), "start", [](void *, calldata_t *params) {
+			if (QTChatPlugin::getInstance())
+				QMetaObject::invokeMethod(QTChatPlugin::getInstance(), "onStreamStarted", Qt::QueuedConnection);
 		});
-		QObject::connect(obs_output_get_signal_handler(streamOutput), "stop", [](void *, calldata_t *params) {
-			QMetaObject::invokeMethod(QTChatPlugin::getInstance(), "onStreamStopped", Qt::QueuedConnection);
+		connect(obs_output_get_signal_handler(streamOutput), "stop", [](void *, calldata_t *params) {
+			if (QTChatPlugin::getInstance())
+				QMetaObject::invokeMethod(QTChatPlugin::getInstance(), "onStreamStopped", Qt::QueuedConnection);
 		});
 		obs_output_release(streamOutput);
 	}
@@ -124,6 +132,11 @@ void QTChatPlugin::onStreamStopped()
 {
 	blog(LOG_INFO, "[QTChat] Stream stopped");
 	m_rtmpDetector->stopDetection();
+}
+
+void QTChatPlugin::onToggleDock(bool visible)
+{
+	obs_frontend_toggle_dock_by_name("qtchat-dock");
 }
 
 extern "C" {

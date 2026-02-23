@@ -2,6 +2,7 @@
 
 #include <obs-module.h>
 #include <obs-frontend-api.h>
+#include <QObject>
 #include <QAction>
 #include <QMainWindow>
 #include <QMenu>
@@ -12,7 +13,8 @@ class ChatManager;
 class RTMPDetector;
 class SettingsDialog;
 
-class QTChatPlugin {
+class QTChatPlugin : public QObject {
+	Q_OBJECT
 public:
 	QTChatPlugin();
 	~QTChatPlugin();
@@ -25,12 +27,16 @@ public:
 	ChatManager *getChatManager() const { return m_chatManager.get(); }
 	RTMPDetector *getRTMPDetector() const { return m_rtmpDetector.get(); }
 
-private:
-	void setupDocks();
-	void setupMenu();
+public slots:
 	void onSettingsClicked();
 	void onStreamStarted();
 	void onStreamStopped();
+	void onToggleDock(bool visible);
+	void applySettings();
+
+private:
+	void setupDocks();
+	void setupMenu();
 
 	std::unique_ptr<ChatDock> m_chatDock;
 	std::unique_ptr<ChatManager> m_chatManager;
