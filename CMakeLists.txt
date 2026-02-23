@@ -11,6 +11,16 @@ include(compilerconfig)
 include(defaults)
 include(helpers)
 
+# Add OBS build paths to CMAKE_PREFIX_PATH so find_package can locate them
+# The OBS build system installs to .deps/ directory
+set(_OBS_VERSION "31.0.3")
+list(APPEND CMAKE_PREFIX_PATH 
+    "${CMAKE_CURRENT_SOURCE_DIR}/.deps"
+    "${CMAKE_CURRENT_SOURCE_DIR}/.deps/obs-studio-${_OBS_VERSION}/build_x64/libobs"
+    "${CMAKE_CURRENT_SOURCE_DIR}/.deps/obs-studio-${_OBS_VERSION}/build_x64/deps/w32-pthreads"
+    "${CMAKE_CURRENT_SOURCE_DIR}/.deps/obs-studio-${_OBS_VERSION}/build_x64/UI/obs-frontend-api"
+)
+
 add_library(${CMAKE_PROJECT_NAME} MODULE)
 
 find_package(libobs REQUIRED)
@@ -37,7 +47,13 @@ if(ENABLE_QT)
   endif()
 endif()
 
+# Create precompiled header
+target_precompile_headers(${CMAKE_PROJECT_NAME} PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/pch.h>
+)
+
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
+  ./src/pch.h
   ./src/plugin-main.h
   ./src/plugin-main.cpp
   ./src/chat-dock.h
@@ -58,8 +74,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
-  ${libobs_INCLUDE_DIRS}
-  ${obs-frontend-api_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/.deps/obs-studio-${_OBS_VERSION}/libobs
+  ${CMAKE_CURRENT_SOURCE_DIR}/.deps/include
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
