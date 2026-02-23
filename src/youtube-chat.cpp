@@ -55,7 +55,7 @@ void YouTubeChat::fetchLiveChatId()
 		if (reply->error() != QNetworkReply::NoError) {
 			QString error = reply->errorString();
 			blog(LOG_ERROR, "[YouTubeChat] Error fetching live chat: %s", qPrintable(error));
-			emit error(error);
+			emit errorOccurred(error);
 			reply->deleteLater();
 			return;
 		}
@@ -85,7 +85,7 @@ void YouTubeChat::fetchLiveChatId()
 						QString error = videosReply->errorString();
 						blog(LOG_ERROR, "[YouTubeChat] Error fetching video details: %s",
 						     qPrintable(error));
-						emit error(error);
+						emit errorOccurred(error);
 						videosReply->deleteLater();
 						return;
 					}
@@ -118,12 +118,12 @@ void YouTubeChat::fetchLiveChatId()
 					}
 
 					blog(LOG_WARNING, "[YouTubeChat] No active live stream found");
-					emit error("No active live stream found");
+					emit errorOccurred("No active live stream found");
 					videosReply->deleteLater();
 				});
 			} else {
 				blog(LOG_WARNING, "[YouTubeChat] No live streams found");
-				emit error("No live streams found");
+				emit errorOccurred("No live streams found");
 			}
 		}
 
@@ -168,7 +168,7 @@ void YouTubeChat::onNetworkReply()
 	if (reply->error() != QNetworkReply::NoError) {
 		QString error = reply->errorString();
 		blog(LOG_ERROR, "[YouTubeChat] Polling error: %s", qPrintable(error));
-		emit error(error);
+		emit errorOccurred(error);
 		reply->deleteLater();
 		return;
 	}

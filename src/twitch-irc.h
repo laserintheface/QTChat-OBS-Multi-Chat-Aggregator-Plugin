@@ -25,7 +25,7 @@ signals:
 	void messageReceived(const ChatMessage &message);
 	void connected();
 	void disconnected();
-	void error(const QString &errorMessage);
+	void errorOccurred(const QString &errorMessage);
 
 private slots:
 	void onReadyRead();

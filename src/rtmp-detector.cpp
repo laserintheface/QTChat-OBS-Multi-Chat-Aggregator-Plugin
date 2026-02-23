@@ -52,20 +52,18 @@ void RTMPDetector::checkOutputs()
 
 	obs_output_t *output = obs_get_output_by_name("simple_output");
 	if (output) {
-		const char *service = obs_output_get_service(output);
+		obs_service_t *service = obs_output_get_service(output);
 		if (service) {
-			DetectedOutput detected;
-			detected.url = service;
-			detected.platform = detectPlatform(service);
+			const char *serviceName = obs_service_get_name(service);
+			if (serviceName) {
+				DetectedOutput detected;
+				detected.url = serviceName;
+				detected.platform = detectPlatform(serviceName);
 
-			const char *key = obs_output_get_last_streaming_key(output);
-			if (key) {
-				detected.key = key;
+				m_detectedOutputs.append(detected);
+				blog(LOG_INFO, "[RTMPDetector] Detected output: %s (platform: %d)", qPrintable(detected.url),
+				     (int)detected.platform);
 			}
-
-			m_detectedOutputs.append(detected);
-			blog(LOG_INFO, "[RTMPDetector] Detected output: %s (platform: %d)", qPrintable(detected.url),
-			     (int)detected.platform);
 		}
 		obs_output_release(output);
 	}
@@ -76,62 +74,52 @@ void RTMPDetector::checkOutputs()
 
 		obs_output_t *streamOutput = obs_get_output_by_name(outputName);
 		if (streamOutput) {
-			const char *service = obs_output_get_service(streamOutput);
-			if (service && strlen(service) > 0) {
-				bool alreadyAdded = false;
-				for (const DetectedOutput &existing : m_detectedOutputs) {
-					if (existing.url == service) {
-						alreadyAdded = true;
-						break;
-					}
-				}
-
-				if (!alreadyAdded) {
-					DetectedOutput detected;
-					detected.url = service;
-					detected.platform = detectPlatform(service);
-
-					const char *key = obs_output_get_last_streaming_key(streamOutput);
-					if (key) {
-						detected.key = key;
+			obs_service_t *service = obs_output_get_service(streamOutput);
+			if (service) {
+				const char *serviceName = obs_service_get_name(service);
+				if (serviceName && strlen(serviceName) > 0) {
+					bool alreadyAdded = false;
+					for (const DetectedOutput &existing : m_detectedOutputs) {
+						if (existing.url == serviceName) {
+							alreadyAdded = true;
+							break;
+						}
 					}
 
-					m_detectedOutputs.append(detected);
-					blog(LOG_INFO, "[RTMPDetector] Detected additional output: %s (platform: %d)",
-					     qPrintable(detected.url), (int)detected.platform);
+					if (!alreadyAdded) {
+						DetectedOutput detected;
+						detected.url = serviceName;
+						detected.platform = detectPlatform(serviceName);
+
+						m_detectedOutputs.append(detected);
+						blog(LOG_INFO, "[RTMPDetector] Detected additional output: %s (platform: %d)",
+						     qPrintable(detected.url), (int)detected.platform);
+					}
 				}
 			}
 			obs_output_release(streamOutput);
 		}
 	}
 
-	if (!m_detectedOutputs.isEmpty()) {
-		emit outputsDetected(m_detectedOutputs);
-
-		if (m_chatManager) {
-			for (const DetectedOutput &output : m_detectedOutputs) {
-				m_chatManager->enablePlatform(output.platform, true);
-			}
+	if (m_chatManager) {
+		for (const DetectedOutput &output : m_detectedOutputs) {
+			m_chatManager->onOutputDetected(output.url, output.platform);
 		}
 	}
 }
 
-RTMPDetector::Platform RTMPDetector::detectPlatform(const QString &url)
+Platform RTMPDetector::detectPlatform(const QString &urlOrName)
 {
-	QString lowerUrl = url.toLower();
-
-	if (lowerUrl.contains("rtmp://") || lowerUrl.contains("live.twitch.tv")) {
+	if (urlOrName.contains("twitch", Qt::CaseInsensitive) || 
+	    urlOrName.contains("live.twitch.tv", Qt::CaseInsensitive)) {
 		return Platform::Twitch;
 	}
-	if (lowerUrl.contains("youtube.com") || lowerUrl.contains("youtu.be") || lowerUrl.contains("googlevideo.com")) {
+	if (urlOrName.contains("youtube", Qt::CaseInsensitive) ||
+	    urlOrName.contains("youtu.be", Qt::CaseInsensitive)) {
 		return Platform::YouTube;
 	}
-	if (lowerUrl.contains("kick.com") || lowerUrl.contains("rtmp.kick.com")) {
+	if (urlOrName.contains("kick", Qt::CaseInsensitive)) {
 		return Platform::Kick;
 	}
-	if (lowerUrl.contains("trovo.live") || lowerUrl.contains("rtmp.trovo.live")) {
-		return Platform::Trovo;
-	}
-
 	return Platform::Unknown;
 }

@@ -76,7 +76,7 @@ SettingsDialog::~SettingsDialog() {}
 
 void SettingsDialog::loadSettings()
 {
-	QString configPath = QDir::homePath() + "/.config/obs-studio/" SETTINGS_FILE;
+	QString configPath = QDir::homePath() + "/.config/obs-studio/" + SETTINGS_FILE;
 	QFile file(configPath);
 
 	if (!file.exists()) {
@@ -120,7 +120,7 @@ void SettingsDialog::saveSettings()
 		dir.mkpath(configDir);
 	}
 
-	QString configPath = configDir + "/" SETTINGS_FILE;
+	QString configPath = configDir + "/" + SETTINGS_FILE;
 	QFile file(configPath);
 
 	if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {

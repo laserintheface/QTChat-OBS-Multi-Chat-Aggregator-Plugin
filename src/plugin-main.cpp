@@ -100,19 +100,6 @@ void QTChatPlugin::setupMenu()
 	m_menu->addAction(m_toggleDockAction);
 
 	menuBar->addMenu(m_menu);
-
-	auto streamOutput = obs_get_output_by_name("simple_output");
-	if (streamOutput) {
-		connect(obs_output_get_signal_handler(streamOutput), "start", [](void *, calldata_t *params) {
-			if (QTChatPlugin::getInstance())
-				QMetaObject::invokeMethod(QTChatPlugin::getInstance(), "onStreamStarted", Qt::QueuedConnection);
-		});
-		connect(obs_output_get_signal_handler(streamOutput), "stop", [](void *, calldata_t *params) {
-			if (QTChatPlugin::getInstance())
-				QMetaObject::invokeMethod(QTChatPlugin::getInstance(), "onStreamStopped", Qt::QueuedConnection);
-		});
-		obs_output_release(streamOutput);
-	}
 }
 
 void QTChatPlugin::onSettingsClicked()
@@ -136,7 +123,14 @@ void QTChatPlugin::onStreamStopped()
 
 void QTChatPlugin::onToggleDock(bool visible)
 {
-	obs_frontend_toggle_dock_by_name("qtchat-dock");
+	QDockWidget *dock = nullptr;
+	QMainWindow *mainWindow = obs_frontend_get_main_window();
+	if (mainWindow) {
+		dock = mainWindow->findChild<QDockWidget *>("qtchat-dock");
+		if (dock) {
+			dock->setVisible(!dock->isVisible());
+		}
+	}
 }
 
 extern "C" {

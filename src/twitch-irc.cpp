@@ -24,7 +24,8 @@ TwitchIRC::TwitchIRC(QObject *parent) : QObject(parent)
 	connect(m_socket, &QTcpSocket::readyRead, this, &TwitchIRC::onReadyRead);
 	connect(m_socket, &QTcpSocket::connected, this, &TwitchIRC::onConnected);
 	connect(m_socket, &QTcpSocket::disconnected, this, &TwitchIRC::onDisconnected);
-	connect(m_socket, QOverload<QAbstractSocket::SocketError>::of(&QTcpSocket::error), this, &TwitchIRC::onError);
+	connect(m_socket, qOverload<QAbstractSocket::SocketError>(&QTcpSocket::error),
+		this, &TwitchIRC::onError);
 	connect(m_reconnectTimer, &QTimer::timeout, this, &TwitchIRC::onReconnectTimer);
 	connect(m_pingTimer, &QTimer::timeout, this, [this]() {
 		if (m_connected && m_socket->isOpen()) {
@@ -96,7 +97,7 @@ void TwitchIRC::onError(QAbstractSocket::SocketError socketError)
 	Q_UNUSED(socketError);
 	QString errorMsg = m_socket->errorString();
 	blog(LOG_ERROR, "[TwitchIRC] Socket error: %s", qPrintable(errorMsg));
-	emit error(errorMsg);
+	emit errorOccurred(errorMsg);
 }
 
 void TwitchIRC::onReadyRead()
