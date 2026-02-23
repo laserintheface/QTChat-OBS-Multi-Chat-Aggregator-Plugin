@@ -6,6 +6,10 @@
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 #include <QMenuBar>
+#include <QMenu>
+#include <QAction>
+#include <QMainWindow>
+#include <QDockWidget>
 #include <QMessageBox>
 
 QTChatPlugin *QTChatPlugin::s_instance = nullptr;
@@ -62,13 +66,19 @@ void QTChatPlugin::unload()
 	}
 
 	if (m_chatDock) {
-		obs_frontend_remove_dock("qtchat-dock");
+		QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
+		if (mainWindow) {
+			mainWindow->removeDockWidget(m_chatDock.get());
+		}
 		m_chatDock.reset();
 	}
 
 	if (m_menu) {
-		QMenuBar *menuBar = obs_frontend_get_main_menu();
-		menuBar->removeAction(m_menu->menuAction());
+		QMainWindow *mainWindow = obs_frontend_get_main_window();
+		QMenuBar *menuBar = mainWindow ? mainWindow->menuBar() : nullptr;
+		if (menuBar) {
+			menuBar->removeAction(m_menu->menuAction());
+		}
 		delete m_menu;
 		m_menu = nullptr;
 	}
@@ -81,13 +91,19 @@ void QTChatPlugin::unload()
 
 void QTChatPlugin::setupDocks()
 {
-	obs_frontend_add_dock(m_chatDock.get(), "QTChat", "qtchat-dock");
-	blog(LOG_INFO, "[QTChat] Dock added");
+	QMainWindow *mainWindow = obs_frontend_get_main_window();
+	if (mainWindow) {
+		mainWindow->addDockWidget(Qt::RightDockWidgetArea, m_chatDock.get());
+		m_chatDock->setWindowTitle("QTChat");
+		m_chatDock->setObjectName("qtchat-dock");
+		blog(LOG_INFO, "[QTChat] Dock added");
+	}
 }
 
 void QTChatPlugin::setupMenu()
 {
-	QMenuBar *menuBar = obs_frontend_get_main_menu();
+	QMainWindow *mainWindow = obs_frontend_get_main_window();
+	QMenuBar *menuBar = mainWindow ? mainWindow->menuBar() : nullptr;
 
 	m_menu = new QMenu(obs_module_text("Plugin.Name"));
 
@@ -99,7 +115,9 @@ void QTChatPlugin::setupMenu()
 	connect(m_toggleDockAction, &QAction::triggered, this, &QTChatPlugin::onToggleDock);
 	m_menu->addAction(m_toggleDockAction);
 
-	menuBar->addMenu(m_menu);
+	if (menuBar) {
+		menuBar->addMenu(m_menu);
+	}
 }
 
 void QTChatPlugin::onSettingsClicked()
@@ -123,10 +141,9 @@ void QTChatPlugin::onStreamStopped()
 
 void QTChatPlugin::onToggleDock(bool visible)
 {
-	QDockWidget *dock = nullptr;
-	QMainWindow *mainWindow = obs_frontend_get_main_window();
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 	if (mainWindow) {
-		dock = mainWindow->findChild<QDockWidget *>("qtchat-dock");
+		QDockWidget *dock = mainWindow->findChild<QDockWidget *>("qtchat-dock");
 		if (dock) {
 			dock->setVisible(!dock->isVisible());
 		}

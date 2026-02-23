@@ -142,3 +142,8 @@ void ChatManager::onYouTubeDisconnected()
 	blog(LOG_INFO, "[ChatManager] YouTube disconnected");
 	emit youtubeConnectedChanged(false);
 }
+
+void ChatManager::onOutputDetected(const QString &url, RTMPDetector::Platform platform)
+{
+	blog(LOG_INFO, "[ChatManager] Output detected: %s (platform: %d)", qPrintable(url), (int)platform);
+}

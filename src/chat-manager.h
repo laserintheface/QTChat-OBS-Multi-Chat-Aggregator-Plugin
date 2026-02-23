@@ -46,6 +46,7 @@ private slots:
 	void onTwitchDisconnected();
 	void onYouTubeConnected();
 	void onYouTubeDisconnected();
+	void onOutputDetected(const QString &url, RTMPDetector::Platform platform);
 
 private:
 	ChatDock *m_chatDock = nullptr;

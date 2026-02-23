@@ -4,6 +4,7 @@
 #include <QJsonArray>
 #include <QUrl>
 #include <QUrlQuery>
+#include <QTimeZone>
 #include <obs-module.h>
 
 YouTubeChat::YouTubeChat(QObject *parent) : QObject(parent)
@@ -218,7 +219,7 @@ void YouTubeChat::parseMessages(const QJsonArray &messages)
 
 		QString publishedAt = snippet["publishedAt"].toString();
 		QDateTime timestamp = QDateTime::fromString(publishedAt, "yyyy-MM-ddThh:mm:ss.zzzZ");
-		timestamp.setTimeSpec(Qt::UTC);
+		timestamp.setTimeZone(QTimeZone::UTC);
 		msg.timestamp = timestamp.toLocalTime();
 
 		if (authorDetails.contains("chatOwner")) {
