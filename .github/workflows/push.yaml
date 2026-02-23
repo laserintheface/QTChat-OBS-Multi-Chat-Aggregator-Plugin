@@ -53,12 +53,13 @@ jobs:
 
       - name: Build OBS Studio
         run: |
-          $env:OBS_STUDIO_DIR = "$PWD/obs-studio"
-          $env:OBS_DEPS_DIR = "$PWD/obs-deps"
+          $basePath = (Get-Location).Path -replace '\', '/'
+          $env:OBS_STUDIO_DIR = "$basePath/obs-studio"
+          $env:OBS_DEPS_DIR = "$basePath/obs-deps"
           $env:OBS_OUTPUT_DIR = "rundir"
           $env:CMAKE_PREFIX_PATH = "$env:OBS_DEPS_DIR"
           
-          Write-Host "Building OBS Studio..."
+          Write-Host "Building OBS Studio with CMAKE_PREFIX_PATH=$env:CMAKE_PREFIX_PATH"
           
           cmake -S "$env:OBS_STUDIO_DIR" -B "$env:OBS_STUDIO_DIR/build" -G "Visual Studio 17 2022" -A x64 -DCMAKE_SYSTEM_PROCESSOR=AMD64 -DCMAKE_PREFIX_PATH="$env:OBS_DEPS_DIR" -DCOVERAGE=OFF -DENABLE_TESTING=OFF -DENABLE_BROWSER=OFF -DENABLE_CAPTIONS=OFF -DENABLE_ENCODER_AOM=OFF -DENABLE_ENCODER_JPEG=OFF -DENABLE_ENCODER_PTHREAD=OFF -DENABLE_ENCODER_SRT=OFF -DENABLE_FFmpeg=OFF -DENABLE_JACK=OFF -DENABLE_MACOS_AUDIO=OFF -DENABLE_MACOS_CAPTURE=OFF -DENABLE_NATIVE_NVENC=OFF -DENABLE_PIPEWIRE=OFF -DENABLE_PORTAUDIO=OFF -DENABLE_QSV=OFF -DENABLE_Rdma=OFF -DENABLE_SCRIPTING=OFF -DENABLE_SKINS=OFF -DENABLE_SNDIO=OFF -DENABLE_SPEECH_RECOGNIZER=OFF -DENABLE_STUDIO_V3D=OFF -DENABLE_TEXT=OFF -DENABLE_TTF=OFF -DENABLE_VCE=OFF -DENABLE_VNC=OFF -DENABLE_WEBRTC=OFF -DENABLE_WINDOWS_CAPTURE=OFF -DOBS_OUTPUT_DIR="$env:OBS_OUTPUT_DIR"
           
@@ -66,14 +67,18 @@ jobs:
 
       - name: Configure Plugin
         run: |
-          $workDir = "$PWD"
-          $obsStudioDir = "$workDir/obs-studio"
-          $obsDepsDir = "$workDir/obs-deps"
+          $basePath = (Get-Location).Path -replace '\', '/'
+          $obsStudioDir = "$basePath/obs-studio"
+          $obsDepsDir = "$basePath/obs-deps"
           
           $cmakePrefixPath = "$obsDepsDir;$obsStudioDir/build"
           $cmakeModulePath = "$obsStudioDir/cmake/Modules"
           
-          Write-Host "Configuring plugin..."
+          Write-Host "Base path: $basePath"
+          Write-Host "OBS Studio: $obsStudioDir"
+          Write-Host "OBS Deps: $obsDepsDir"
+          Write-Host "CMAKE_PREFIX_PATH: $cmakePrefixPath"
+          Write-Host "CMAKE_MODULE_PATH: $cmakeModulePath"
           
           cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_SYSTEM_PROCESSOR=AMD64 -DOBS_OUTPUT_DIR="rundir" -DOBS_STUDIO_DIR="$obsStudioDir" -DOBS_DEPS_DIR="$obsDepsDir" -DCMAKE_PREFIX_PATH="$cmakePrefixPath" -DCMAKE_MODULE_PATH="$cmakeModulePath"
 
