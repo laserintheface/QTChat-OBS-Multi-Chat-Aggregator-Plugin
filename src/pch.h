@@ -4,7 +4,6 @@
 #include <obs-module.h>
 #include <obs-frontend-api.h>
 #include <obs.h>
-#include <util/log.h>
 #include <util/platform.h>
 
 // Qt Core
