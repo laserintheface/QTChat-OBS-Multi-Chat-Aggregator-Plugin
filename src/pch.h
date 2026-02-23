@@ -6,6 +6,9 @@
 #include <obs.h>
 #include <util/platform.h>
 
+// Local OBS util stubs
+#include "util/log.h"
+
 // Qt Core
 #include <QObject>
 #include <QString>

@@ -16,6 +16,7 @@ include(helpers)
 set(_OBS_VERSION "31.0.3")
 list(APPEND CMAKE_PREFIX_PATH 
     "${CMAKE_CURRENT_SOURCE_DIR}/.deps"
+    "${CMAKE_CURRENT_SOURCE_DIR}/.deps/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/.deps/obs-studio-${_OBS_VERSION}/build_x64/libobs"
     "${CMAKE_CURRENT_SOURCE_DIR}/.deps/obs-studio-${_OBS_VERSION}/build_x64/deps/w32-pthreads"
     "${CMAKE_CURRENT_SOURCE_DIR}/.deps/obs-studio-${_OBS_VERSION}/build_x64/UI/obs-frontend-api"
