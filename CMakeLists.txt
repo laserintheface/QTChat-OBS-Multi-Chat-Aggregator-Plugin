@@ -13,7 +13,7 @@ include(helpers)
 
 # Add OBS build paths to CMAKE_PREFIX_PATH so find_package can locate them
 # The OBS build system installs to .deps/ directory
-set(_OBS_VERSION "31.0.3")
+set(_OBS_VERSION "32.0.4")
 list(APPEND CMAKE_PREFIX_PATH 
     "${CMAKE_CURRENT_SOURCE_DIR}/.deps"
     "${CMAKE_CURRENT_SOURCE_DIR}/.deps/include"
