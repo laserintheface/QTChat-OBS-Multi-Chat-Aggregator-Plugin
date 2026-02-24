@@ -72,8 +72,6 @@ void QTChatPlugin::unload()
 		}
 		m_chatDock.reset();
 	}
-		m_chatDock.reset();
-	}
 
 	if (m_menu) {
 		QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
