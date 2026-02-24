@@ -6,7 +6,7 @@
             "label": "OBS sources",
             "hashes": {
                 "macos": "sha256",
-                "windows-x64": "d9e62ea24305fbfe14c69a6422de1525fe84da232df2cc0d7e4601a840bdbba8"
+                "windows-x64": "5e17f2e99213af77ee15c047755ee3e3e88b78e5eee17351c113d79671ffb98b"
             }
         },
         "prebuilt": {
