@@ -39,7 +39,7 @@ signals:
 	void twitchConnectedChanged(bool connected);
 	void youtubeConnectedChanged(bool connected);
 
-private slots:
+public slots:
 	void onTwitchMessage(const ChatMessage &message);
 	void onYouTubeMessage(const ChatMessage &message);
 	void onTwitchConnected();

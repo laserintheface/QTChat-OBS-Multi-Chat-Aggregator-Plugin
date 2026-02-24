@@ -108,7 +108,7 @@ void RTMPDetector::checkOutputs()
 	}
 }
 
-Platform RTMPDetector::detectPlatform(const QString &urlOrName)
+RTMPDetector::Platform RTMPDetector::detectPlatform(const QString &urlOrName)
 {
 	if (urlOrName.contains("twitch", Qt::CaseInsensitive) || 
 	    urlOrName.contains("live.twitch.tv", Qt::CaseInsensitive)) {

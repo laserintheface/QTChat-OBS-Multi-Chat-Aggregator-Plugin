@@ -238,7 +238,7 @@ ChatMessage TwitchIRC::parsePrivmsg(const QString &message, const QString &prefi
 	}
 
 	if (msg.usernameColor == QColor()) {
-		uint hash = qHash(msg.username);
+		uint hash = static_cast<uint>(qHash(msg.username));
 		int colorIndex = hash % TwitchUsernameColors.size();
 		msg.usernameColor = TwitchUsernameColors.values().at(colorIndex);
 	}

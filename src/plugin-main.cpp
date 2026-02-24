@@ -72,9 +72,11 @@ void QTChatPlugin::unload()
 		}
 		m_chatDock.reset();
 	}
+		m_chatDock.reset();
+	}
 
 	if (m_menu) {
-		QMainWindow *mainWindow = obs_frontend_get_main_window();
+		QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 		QMenuBar *menuBar = mainWindow ? mainWindow->menuBar() : nullptr;
 		if (menuBar) {
 			menuBar->removeAction(m_menu->menuAction());
@@ -91,7 +93,7 @@ void QTChatPlugin::unload()
 
 void QTChatPlugin::setupDocks()
 {
-	QMainWindow *mainWindow = obs_frontend_get_main_window();
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 	if (mainWindow) {
 		mainWindow->addDockWidget(Qt::RightDockWidgetArea, m_chatDock.get());
 		m_chatDock->setWindowTitle("QTChat");
@@ -102,7 +104,7 @@ void QTChatPlugin::setupDocks()
 
 void QTChatPlugin::setupMenu()
 {
-	QMainWindow *mainWindow = obs_frontend_get_main_window();
+	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 	QMenuBar *menuBar = mainWindow ? mainWindow->menuBar() : nullptr;
 
 	m_menu = new QMenu(obs_module_text("Plugin.Name"));
