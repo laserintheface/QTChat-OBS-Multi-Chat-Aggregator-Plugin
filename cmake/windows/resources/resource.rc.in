@@ -2,8 +2,8 @@
 #include <winresrc.h>
 
 VS_VERSION_INFO VERSIONINFO
-    FILEVERSION PLUGIN_VERSION_MAJOR,PLUGIN_VERSION_MINOR,PLUGIN_VERSION_PATCH,0
-    PRODUCTVERSION PLUGIN_VERSION_MAJOR,PLUGIN_VERSION_MINOR,PLUGIN_VERSION_PATCH,0
+    FILEVERSION @PLUGIN_VERSION_MAJOR@,@PLUGIN_VERSION_MINOR@,@PLUGIN_VERSION_PATCH@,0
+    PRODUCTVERSION @PLUGIN_VERSION_MAJOR@,@PLUGIN_VERSION_MINOR@,@PLUGIN_VERSION_PATCH@,0
     FILEFLAGSMASK 0x3fL
     FILEFLAGS 0
     FILEOS 0x40000L
@@ -16,12 +16,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "QTChat"
             VALUE "FileDescription", "QTChat OBS Plugin"
-            VALUE "FileVersion", PLUGIN_VERSION
+            VALUE "FileVersion", "@PLUGIN_VERSION@"
             VALUE "InternalName", "QTChat"
             VALUE "LegalCopyright", "Copyright (C) 2024"
             VALUE "OriginalFilename", "QTChat.dll"
             VALUE "ProductName", "QTChat"
-            VALUE "ProductVersion", PLUGIN_VERSION
+            VALUE "ProductVersion", "@PLUGIN_VERSION@"
         END
     END
     BLOCK "VarFileInfo"
