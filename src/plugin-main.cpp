@@ -105,13 +105,13 @@ void QTChatPlugin::setupMenu()
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 	QMenuBar *menuBar = mainWindow ? mainWindow->menuBar() : nullptr;
 
-	m_menu = new QMenu(obs_module_text("Plugin.Name"));
+	m_menu = new QMenu("QTChat");
 
-	m_settingsAction = new QAction(obs_module_text("Settings.Title"), m_menu);
+	m_settingsAction = new QAction("Settings", m_menu);
 	connect(m_settingsAction, &QAction::triggered, this, &QTChatPlugin::onSettingsClicked);
 	m_menu->addAction(m_settingsAction);
 
-	m_toggleDockAction = new QAction(obs_module_text("Chat.Combined"), m_menu);
+	m_toggleDockAction = new QAction("Combined", m_menu);
 	connect(m_toggleDockAction, &QAction::triggered, this, &QTChatPlugin::onToggleDock);
 	m_menu->addAction(m_toggleDockAction);
 

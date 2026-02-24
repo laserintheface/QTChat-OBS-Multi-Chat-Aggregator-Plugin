@@ -9,13 +9,13 @@ static const char *SETTINGS_FILE = "qtchat-settings.ini";
 
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 {
-	setWindowTitle(obs_module_text("Settings.Title"));
+	setWindowTitle("Settings");
 	setMinimumWidth(450);
 	setModal(true);
 
 	QVBoxLayout *mainLayout = new QVBoxLayout(this);
 
-	m_twitchGroup = new QGroupBox(obs_module_text("Settings.Twitch"), this);
+	m_twitchGroup = new QGroupBox("Twitch", this);
 	QFormLayout *twitchLayout = new QFormLayout();
 
 	m_twitchOAuthEdit = new QLineEdit(this);
@@ -25,17 +25,17 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 	m_twitchChannelEdit = new QLineEdit(this);
 	m_twitchChannelEdit->setPlaceholderText("channel_name");
 
-	m_twitchEnabledCheck = new QCheckBox(obs_module_text("Settings.Enabled"), this);
+	m_twitchEnabledCheck = new QCheckBox("Enabled", this);
 	m_twitchEnabledCheck->setChecked(true);
 
-	twitchLayout->addRow(obs_module_text("Settings.TwitchOAuth"), m_twitchOAuthEdit);
-	twitchLayout->addRow(obs_module_text("Settings.TwitchChannel"), m_twitchChannelEdit);
+	twitchLayout->addRow("OAuth Token:", m_twitchOAuthEdit);
+	twitchLayout->addRow("Channel:", m_twitchChannelEdit);
 	twitchLayout->addRow("", m_twitchEnabledCheck);
 	m_twitchGroup->setLayout(twitchLayout);
 
 	mainLayout->addWidget(m_twitchGroup);
 
-	m_youtubeGroup = new QGroupBox(obs_module_text("Settings.YouTube"), this);
+	m_youtubeGroup = new QGroupBox("YouTube", this);
 	QFormLayout *youtubeLayout = new QFormLayout();
 
 	m_youtubeAPIKeyEdit = new QLineEdit(this);
@@ -45,11 +45,11 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 	m_youtubeChannelIdEdit = new QLineEdit(this);
 	m_youtubeChannelIdEdit->setPlaceholderText("UC...");
 
-	m_youtubeEnabledCheck = new QCheckBox(obs_module_text("Settings.Enabled"), this);
+	m_youtubeEnabledCheck = new QCheckBox("Enabled", this);
 	m_youtubeEnabledCheck->setChecked(true);
 
-	youtubeLayout->addRow(obs_module_text("Settings.YouTubeAPIKey"), m_youtubeAPIKeyEdit);
-	youtubeLayout->addRow(obs_module_text("Settings.YouTubeChannelID"), m_youtubeChannelIdEdit);
+	youtubeLayout->addRow("API Key:", m_youtubeAPIKeyEdit);
+	youtubeLayout->addRow("Channel ID:", m_youtubeChannelIdEdit);
 	youtubeLayout->addRow("", m_youtubeEnabledCheck);
 	m_youtubeGroup->setLayout(youtubeLayout);
 
@@ -58,8 +58,8 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 	QHBoxLayout *buttonLayout = new QHBoxLayout();
 	buttonLayout->addStretch();
 
-	m_saveButton = new QPushButton(obs_module_text("Settings.Save"), this);
-	m_cancelButton = new QPushButton(obs_module_text("Settings.Cancel"), this);
+	m_saveButton = new QPushButton("Save", this);
+	m_cancelButton = new QPushButton("Cancel", this);
 
 	buttonLayout->addWidget(m_saveButton);
 	buttonLayout->addWidget(m_cancelButton);

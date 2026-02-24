@@ -4,7 +4,7 @@
 #include <QFont>
 #include <QColorDialog>
 
-ChatDock::ChatDock(QWidget *parent) : QDockWidget(obs_module_text("Plugin.Name"), parent)
+ChatDock::ChatDock(QWidget *parent) : QDockWidget("QTChat", parent)
 {
 	setObjectName("qtchat-dock");
 	setAllowedAreas(Qt::AllDockWidgetAreas);
@@ -15,7 +15,7 @@ ChatDock::ChatDock(QWidget *parent) : QDockWidget(obs_module_text("Plugin.Name")
 	mainLayout->setContentsMargins(4, 4, 4, 4);
 
 	QHBoxLayout *headerLayout = new QHBoxLayout();
-	m_statusLabel = new QLabel(obs_module_text("Settings.Disconnected"), this);
+	m_statusLabel = new QLabel("Disconnected", this);
 	m_clearButton = new QPushButton("Clear", this);
 	headerLayout->addWidget(m_statusLabel);
 	headerLayout->addStretch();
@@ -37,9 +37,9 @@ ChatDock::ChatDock(QWidget *parent) : QDockWidget(obs_module_text("Plugin.Name")
 	m_combinedList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
 	m_combinedList->setSpacing(2);
 
-	m_tabWidget->addTab(m_combinedList, obs_module_text("Chat.Combined"));
-	m_tabWidget->addTab(m_twitchList, obs_module_text("Chat.Twitch"));
-	m_tabWidget->addTab(m_youtubeList, obs_module_text("Chat.YouTube"));
+	m_tabWidget->addTab(m_combinedList, "Combined");
+	m_tabWidget->addTab(m_twitchList, "Twitch");
+	m_tabWidget->addTab(m_youtubeList, "YouTube");
 
 	mainLayout->addWidget(m_tabWidget);
 
