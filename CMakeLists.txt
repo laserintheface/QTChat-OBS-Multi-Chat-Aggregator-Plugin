@@ -25,11 +25,11 @@ list(APPEND CMAKE_PREFIX_PATH
 add_library(${CMAKE_PROJECT_NAME} MODULE)
 
 find_package(libobs REQUIRED)
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::libobs)
+target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC OBS::libobs)
 
 if(ENABLE_FRONTEND_API)
   find_package(obs-frontend-api REQUIRED)
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE OBS::obs-frontend-api)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC OBS::obs-frontend-api)
 endif()
 
 if(ENABLE_QT)
@@ -83,4 +83,5 @@ set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_nam
 
 if(WIN32)
   set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES SUFFIX ".dll")
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE user32.lib)
 endif()
