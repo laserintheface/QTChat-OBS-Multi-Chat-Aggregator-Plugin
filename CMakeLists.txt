@@ -20,15 +20,20 @@ list(APPEND CMAKE_PREFIX_PATH
     "${CMAKE_CURRENT_SOURCE_DIR}/.deps/obs-studio-${_OBS_VERSION}/build_x64/libobs"
     "${CMAKE_CURRENT_SOURCE_DIR}/.deps/obs-studio-${_OBS_VERSION}/build_x64/deps/w32-pthreads"
     "${CMAKE_CURRENT_SOURCE_DIR}/.deps/obs-studio-${_OBS_VERSION}/build_x64/UI/obs-frontend-api"
+    "${CMAKE_CURRENT_SOURCE_DIR}/.deps/obs-studio-${_OBS_VERSION}/build_x64/plugins/plugin-support"
+)
+
+# Add library search path for linking
+link_directories(
+    "${CMAKE_CURRENT_SOURCE_DIR}/.deps/obs-studio-${_OBS_VERSION}/build_x64/libobs"
+    "${CMAKE_CURRENT_SOURCE_DIR}/.deps/obs-studio-${_OBS_VERSION}/build_x64/deps/w32-pthreads"
+    "${CMAKE_CURRENT_SOURCE_DIR}/.deps/obs-studio-${_OBS_VERSION}/build_x64/plugins/plugin-support"
 )
 
 add_library(${CMAKE_PROJECT_NAME} MODULE)
 
 find_package(libobs REQUIRED)
 target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC OBS::libobs)
-
-# Link with obs-module for proper plugin support (provides obs_module_text)
-target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC obs-module)
 
 if(ENABLE_FRONTEND_API)
   find_package(obs-frontend-api REQUIRED)

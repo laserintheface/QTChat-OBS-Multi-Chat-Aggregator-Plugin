@@ -1,4 +1,3 @@
-#define OBS_MODULE_USE_TRANSLATION
 #include "plugin-main.h"
 #include "chat-dock.h"
 #include "chat-manager.h"
