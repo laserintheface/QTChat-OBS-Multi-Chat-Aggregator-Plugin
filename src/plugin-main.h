@@ -33,6 +33,7 @@ public slots:
 	void onStreamStopped();
 	void onToggleDock(bool visible);
 	void applySettings();
+	void onObsReady();
 
 private:
 	void setupDocks();

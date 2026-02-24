@@ -14,6 +14,16 @@
 
 QTChatPlugin *QTChatPlugin::s_instance = nullptr;
 
+static void obs_frontend_event_callback(enum obs_frontend_event event, void *data)
+{
+	if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING) {
+		QTChatPlugin *plugin = QTChatPlugin::getInstance();
+		if (plugin) {
+			plugin->onObsReady();
+		}
+	}
+}
+
 QTChatPlugin::QTChatPlugin()
 	: QObject(),
 	  m_chatManager(std::make_unique<ChatManager>()),
@@ -48,7 +58,26 @@ void QTChatPlugin::load()
 	connect(m_settingsDialog.get(), &SettingsDialog::settingsSaved,
 		this, &QTChatPlugin::applySettings);
 
+	obs_frontend_add_event_callback(obs_frontend_event_callback, nullptr);
+
 	blog(LOG_INFO, "[QTChat] Plugin loaded successfully");
+}
+
+void QTChatPlugin::onObsReady()
+{
+	blog(LOG_INFO, "[QTChat] OBS ready, showing dock and settings...");
+
+	if (m_chatDock) {
+		m_chatDock->show();
+	}
+
+	if (m_settingsDialog) {
+		m_settingsDialog->show();
+		m_settingsDialog->raise();
+		m_settingsDialog->activateWindow();
+	}
+
+	blog(LOG_INFO, "[QTChat] Dock and settings shown");
 }
 
 void QTChatPlugin::applySettings()
@@ -59,6 +88,8 @@ void QTChatPlugin::applySettings()
 void QTChatPlugin::unload()
 {
 	blog(LOG_INFO, "[QTChat] Unloading plugin...");
+
+	obs_frontend_remove_event_callback(obs_frontend_event_callback, nullptr);
 
 	if (m_settingsDialog) {
 		m_settingsDialog->close();
