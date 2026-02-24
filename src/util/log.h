@@ -2,8 +2,6 @@
 
 #include <cstdarg>
 #include <cstdio>
-#include <string>
-#include <map>
 
 #ifdef _WIN32
 #define __attribute__(x)
@@ -14,39 +12,6 @@
 #define LOG_WARN  2
 #define LOG_ERROR 1
 #define LOG_TRACE 5
-
-// Stub implementation for obs_module_get_string
-// This function is normally provided by OBS at runtime
-static std::map<std::string, std::string> obs_module_string_map = {
-    {"Plugin.Name", "QTChat"},
-    {"Settings.Title", "Settings"},
-    {"Settings.Twitch", "Twitch"},
-    {"Settings.Enabled", "Enabled"},
-    {"Settings.TwitchOAuth", "OAuth Token:"},
-    {"Settings.TwitchChannel", "Channel:"},
-    {"Settings.YouTube", "YouTube"},
-    {"Settings.YouTubeAPIKey", "API Key:"},
-    {"Settings.YouTubeChannelID", "Channel ID:"},
-    {"Settings.Save", "Save"},
-    {"Settings.Cancel", "Cancel"},
-    {"Settings.Disconnected", "Disconnected"},
-    {"Chat.Combined", "Combined"},
-    {"Chat.Twitch", "Twitch"},
-    {"Chat.YouTube", "YouTube"}
-};
-
-static const char* obs_module_get_string(const char* key)
-{
-    auto it = obs_module_string_map.find(key);
-    if (it != obs_module_string_map.end()) {
-        return it->second.c_str();
-    }
-    return key;
-}
-
-#ifndef obs_module_text
-#define obs_module_text(key) obs_module_get_string(key)
-#endif
 
 #ifndef blog
 
