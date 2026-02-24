@@ -27,6 +27,9 @@ add_library(${CMAKE_PROJECT_NAME} MODULE)
 find_package(libobs REQUIRED)
 target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC OBS::libobs)
 
+# Link with obs-module for proper plugin support (provides obs_module_text)
+target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC obs-module)
+
 if(ENABLE_FRONTEND_API)
   find_package(obs-frontend-api REQUIRED)
   target_link_libraries(${CMAKE_PROJECT_NAME} PUBLIC OBS::obs-frontend-api)
@@ -76,6 +79,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/.deps/obs-studio-${_OBS_VERSION}/libobs
+  ${CMAKE_CURRENT_SOURCE_DIR}/.deps/obs-studio-${_OBS_VERSION}/plugins/plugin-support
   ${CMAKE_CURRENT_SOURCE_DIR}/.deps/include
 )
 
