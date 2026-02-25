@@ -83,7 +83,12 @@ void ChatDock::addMessageToList(QListWidget *list, const ChatMessage &message)
 	font.setPointSize(11);
 	item->setFont(font);
 
-	item->setForeground(message.usernameColor);
+	// Use platform-specific color in combined view, user color in platform-specific views
+	if (list == m_combinedList) {
+		item->setForeground(getPlatformColor(message.platform));
+	} else {
+		item->setForeground(message.usernameColor);
+	}
 
 	while (list->count() > m_messageLimit) {
 		delete list->takeItem(0);
@@ -92,11 +97,22 @@ void ChatDock::addMessageToList(QListWidget *list, const ChatMessage &message)
 
 QString ChatDock::formatMessage(const ChatMessage &message)
 {
-	QString platformTag = QString("[%1]").arg(message.platform.toUpper());
+	// Platform tag with color indicator
+	QString platformTag;
+	QColor platformColor = getPlatformColor(message.platform);
+
+	if (message.platform == "twitch") {
+		platformTag = "[T]";
+	} else if (message.platform == "youtube") {
+		platformTag = "[Y]";
+	} else {
+		platformTag = "[?]";
+	}
+
 	QString prefix;
 
 	if (message.isBroadcaster) {
-		prefix = "★ ";
+		prefix = "* ";
 	} else if (message.isModerator) {
 		prefix = "@ ";
 	} else if (message.isVip) {
@@ -122,9 +138,9 @@ QString ChatDock::formatMessage(const ChatMessage &message)
 QColor ChatDock::getPlatformColor(const QString &platform)
 {
 	if (platform == "twitch") {
-		return QColor(100, 65, 165);
+		return QColor(145, 70, 255);  // Twitch purple
 	} else if (platform == "youtube") {
-		return QColor(255, 0, 0);
+		return QColor(255, 0, 0);     // YouTube red
 	}
 	return QColor(128, 128, 128);
 }

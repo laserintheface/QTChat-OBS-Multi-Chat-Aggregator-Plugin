@@ -23,6 +23,7 @@ public:
 
 	void load();
 	void unload();
+	void shutdown();
 
 	ChatManager *getChatManager() const { return m_chatManager.get(); }
 	RTMPDetector *getRTMPDetector() const { return m_rtmpDetector.get(); }

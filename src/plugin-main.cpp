@@ -120,6 +120,11 @@ void QTChatPlugin::unload()
 	blog(LOG_INFO, "[QTChat] Plugin unloaded");
 }
 
+void QTChatPlugin::shutdown()
+{
+	delete this;
+}
+
 void QTChatPlugin::setupDocks()
 {
 	QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
@@ -207,6 +212,7 @@ void obs_module_unload(void)
 {
 	if (QTChatPlugin::getInstance()) {
 		QTChatPlugin::getInstance()->unload();
+		QTChatPlugin::getInstance()->shutdown();
 	}
 }
 
