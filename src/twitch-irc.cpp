@@ -49,6 +49,9 @@ void TwitchIRC::connectToChannel(const QString &username, const QString &oauthTo
 
 	m_reconnectAttempts = 0;
 
+	blog(LOG_INFO, "[TwitchIRC] Attempting to connect to channel: '%s' (server: %s, port: %d)",
+	     qPrintable(m_channel), qPrintable(m_server), m_port);
+
 	if (m_socket->isOpen()) {
 		m_socket->close();
 	}
@@ -149,7 +152,7 @@ void TwitchIRC::onError(QAbstractSocket::SocketError socketError)
 {
 	Q_UNUSED(socketError);
 	QString errorMsg = m_socket->errorString();
-	blog(LOG_ERROR, "[TwitchIRC] Socket error: %s", qPrintable(errorMsg));
+	blog(LOG_ERROR, "[TwitchIRC] Socket error (%d): %s", socketError, qPrintable(errorMsg));
 	emit errorOccurred(errorMsg);
 }
 

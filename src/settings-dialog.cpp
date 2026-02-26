@@ -76,9 +76,12 @@ SettingsDialog::~SettingsDialog() {}
 void SettingsDialog::loadSettings()
 {
 	QString configPath = QDir::homePath() + "/.config/obs-studio/" + SETTINGS_FILE;
+	blog(LOG_INFO, "[SettingsDialog] Loading settings from: %s", qPrintable(configPath));
+
 	QFile file(configPath);
 
 	if (!file.exists()) {
+		blog(LOG_WARNING, "[SettingsDialog] Settings file does not exist");
 		return;
 	}
 
@@ -95,12 +98,15 @@ void SettingsDialog::loadSettings()
 
 			if (key == "twitch_channel") {
 				m_twitchChannelEdit->setText(value);
+				blog(LOG_INFO, "[SettingsDialog] Loaded twitch_channel: '%s'", qPrintable(value));
 			} else if (key == "twitch_enabled") {
 				m_twitchEnabledCheck->setChecked(value == "true");
+				blog(LOG_INFO, "[SettingsDialog] Loaded twitch_enabled: %s", qPrintable(value));
 			} else if (key == "youtube_apikey") {
 				m_youtubeAPIKeyEdit->setText(value);
 			} else if (key == "youtube_channelid") {
 				m_youtubeChannelIdEdit->setText(value);
+				blog(LOG_INFO, "[SettingsDialog] Loaded youtube_channelid: '%s'", qPrintable(value));
 			} else if (key == "youtube_rtmp_url") {
 				m_youtubeRTMPURLEdit->setText(value);
 			} else if (key == "youtube_enabled") {

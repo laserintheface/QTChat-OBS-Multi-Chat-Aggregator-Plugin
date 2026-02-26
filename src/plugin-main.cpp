@@ -100,9 +100,15 @@ void QTChatPlugin::onObsReady()
 
 void QTChatPlugin::applySettings()
 {
+	blog(LOG_INFO, "[QTChatPlugin] applySettings() called");
+
 	if (m_settingsDialog) {
 		// Transfer settings from dialog to ChatManager
-		m_chatManager->setTwitchChannel(m_settingsDialog->getTwitchChannel());
+		QString twitchChannel = m_settingsDialog->getTwitchChannel();
+		blog(LOG_INFO, "[QTChatPlugin] Twitch channel from settings: '%s'", qPrintable(twitchChannel));
+		blog(LOG_INFO, "[QTChatPlugin] Twitch enabled from settings: %d", m_settingsDialog->isTwitchEnabled());
+
+		m_chatManager->setTwitchChannel(twitchChannel);
 		m_chatManager->setYouTubeAPIKey(m_settingsDialog->getYouTubeAPIKey());
 		m_chatManager->setYouTubeChannelId(m_settingsDialog->getYouTubeChannelId());
 		m_chatManager->setYouTubeRTMPUrl(m_settingsDialog->getYouTubeRTMPUrl());

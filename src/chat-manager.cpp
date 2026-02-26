@@ -91,7 +91,8 @@ void ChatManager::enablePlatform(RTMPDetector::Platform platform, bool enabled)
 	switch (platform) {
 	case RTMPDetector::Platform::Twitch:
 		m_twitchEnabled = enabled;
-		blog(LOG_INFO, "[ChatManager] Twitch platform %s", enabled ? "enabled" : "disabled");
+		blog(LOG_INFO, "[ChatManager] Twitch platform %s (was %s)", enabled ? "enabled" : "disabled",
+		     m_twitchEnabled ? "enabled" : "disabled");
 		break;
 	case RTMPDetector::Platform::YouTube:
 		m_youtubeEnabled = enabled;
@@ -114,11 +115,20 @@ bool ChatManager::isYouTubeConnected() const
 
 void ChatManager::applySettings()
 {
+	blog(LOG_INFO, "[ChatManager] applySettings() called");
+
 	disconnectTwitch();
 	disconnectYouTube();
 
+	blog(LOG_INFO, "[ChatManager] applySettings - m_twitchEnabled=%d, m_twitchChannel='%s'",
+	     m_twitchEnabled, qPrintable(m_twitchChannel));
+
 	if (m_twitchEnabled && !m_twitchChannel.isEmpty()) {
+		blog(LOG_INFO, "[ChatManager] applySettings - calling connectTwitch()");
 		connectTwitch(m_twitchChannel);
+	} else {
+		blog(LOG_WARNING, "[ChatManager] applySettings - NOT connecting Twitch (enabled=%d, channel='%s')",
+		     m_twitchEnabled, qPrintable(m_twitchChannel));
 	}
 
 	if (m_youtubeEnabled && !m_youtubeAPIKey.isEmpty() && !m_youtubeChannelId.isEmpty()) {
