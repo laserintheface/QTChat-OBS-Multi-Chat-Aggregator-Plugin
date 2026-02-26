@@ -57,7 +57,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; Main plugin DLL
 Source: "build\rundir\obs-plugins\64bit\QTChat.dll"; DestDir: "{app}\obs-plugins\64bit"; Flags: ignoreversion
 
-; Plugin data (if any)
+; Plugin data folder (locale, package.json, etc.)
 Source: "build\rundir\data\obs-plugins\QTChat\*"; DestDir: "{app}\data\obs-plugins\QTChat"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]

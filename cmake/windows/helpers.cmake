@@ -75,7 +75,8 @@ function(target_install_resources target)
       source_group("Resources/${relative_path}" FILES "${data_file}")
     endforeach()
 
-    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/data/" DESTINATION "${target}/data" USE_SOURCE_PERMISSIONS)
+    # Install to obs-plugins/{target}/data structure (matching OBS expected layout)
+    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/data/" DESTINATION "obs-plugins/${target}" USE_SOURCE_PERMISSIONS)
 
     add_custom_command(
       TARGET ${target}
@@ -83,7 +84,7 @@ function(target_install_resources target)
       COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/rundir/$<CONFIG>/${target}"
       COMMAND
         "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/data"
-        "${CMAKE_CURRENT_BINARY_DIR}/rundir/$<CONFIG>/${target}"
+        "${CMAKE_CURRENT_BINARY_DIR}/rundir/$<CONFIG>/obs-plugins/${target}"
       COMMENT "Copy ${target} resources to rundir"
       VERBATIM
     )
