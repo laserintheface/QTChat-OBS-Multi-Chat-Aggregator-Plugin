@@ -3,6 +3,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QColor>
+#include <QRandomGenerator>
 #include <obs-module.h>
 
 static const QMap<QString, QColor> TwitchUsernameColors = {
@@ -78,7 +79,17 @@ void TwitchIRC::disconnect()
 void TwitchIRC::onConnected()
 {
 	blog(LOG_INFO, "[TwitchIRC] Connected to Twitch IRC");
-	sendPass(m_oauthToken);
+
+	// Support anonymous connection (no OAuth required for read-only chat)
+	if (!m_oauthToken.isEmpty()) {
+		sendPass(m_oauthToken);
+	} else {
+		// Anonymous mode: use random username starting with "justinfan"
+		// This allows read-only access to any Twitch channel's chat
+		m_username = QString("justinfan%1").arg(QRandomGenerator::global()->bounded(10000, 99999));
+		blog(LOG_INFO, "[TwitchIRC] Using anonymous mode with username: %s", qPrintable(m_username));
+	}
+
 	sendNick(m_username);
 	sendJoin(m_channel);
 }

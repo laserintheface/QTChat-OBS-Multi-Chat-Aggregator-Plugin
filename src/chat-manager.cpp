@@ -26,19 +26,18 @@ void ChatManager::setChatWidget(ChatDock *dock)
 	m_chatDock = dock;
 }
 
-void ChatManager::connectTwitch(const QString &username, const QString &oauthToken, const QString &channel)
+void ChatManager::connectTwitch(const QString &channel)
 {
 	if (!m_twitchEnabled) {
 		blog(LOG_INFO, "[ChatManager] Twitch is disabled");
 		return;
 	}
 
-	m_twitchUsername = username;
-	m_twitchOAuth = oauthToken;
 	m_twitchChannel = channel;
 
 	blog(LOG_INFO, "[ChatManager] Connecting to Twitch: %s", qPrintable(channel));
-	m_twitchIRC->connectToChannel(username, oauthToken, channel);
+	// No OAuth needed - uses anonymous connection for read-only chat
+	m_twitchIRC->connectToChannel("", "", channel);
 }
 
 void ChatManager::disconnectTwitch()
@@ -110,8 +109,8 @@ void ChatManager::applySettings()
 	disconnectTwitch();
 	disconnectYouTube();
 
-	if (m_twitchEnabled && !m_twitchOAuth.isEmpty() && !m_twitchChannel.isEmpty()) {
-		connectTwitch(m_twitchUsername, m_twitchOAuth, m_twitchChannel);
+	if (m_twitchEnabled && !m_twitchChannel.isEmpty()) {
+		connectTwitch(m_twitchChannel);
 	}
 
 	if (m_youtubeEnabled && !m_youtubeAPIKey.isEmpty() && !m_youtubeChannelId.isEmpty()) {

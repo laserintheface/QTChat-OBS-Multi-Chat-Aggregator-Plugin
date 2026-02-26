@@ -80,11 +80,26 @@ void QTChatPlugin::onObsReady()
 		m_settingsDialog->activateWindow();
 	}
 
+	// Apply settings at startup
+	applySettings();
+
 	blog(LOG_INFO, "[QTChat] Dock and settings shown");
 }
 
 void QTChatPlugin::applySettings()
 {
+	if (m_settingsDialog) {
+		// Transfer settings from dialog to ChatManager
+		m_chatManager->setTwitchChannel(m_settingsDialog->getTwitchChannel());
+		m_chatManager->setYouTubeAPIKey(m_settingsDialog->getYouTubeAPIKey());
+		m_chatManager->setYouTubeChannelId(m_settingsDialog->getYouTubeChannelId());
+		m_chatManager->setYouTubeRTMPUrl(m_settingsDialog->getYouTubeRTMPUrl());
+		m_chatManager->enablePlatform(RTMPDetector::Platform::Twitch,
+					       m_settingsDialog->isTwitchEnabled());
+		m_chatManager->enablePlatform(RTMPDetector::Platform::YouTube,
+					       m_settingsDialog->isYouTubeEnabled());
+	}
+
 	m_chatManager->applySettings();
 }
 

@@ -18,17 +18,12 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 	m_twitchGroup = new QGroupBox("Twitch", this);
 	QFormLayout *twitchLayout = new QFormLayout();
 
-	m_twitchOAuthEdit = new QLineEdit(this);
-	m_twitchOAuthEdit->setEchoMode(QLineEdit::Password);
-	m_twitchOAuthEdit->setPlaceholderText("oauth:xxxxxxx");
-
 	m_twitchChannelEdit = new QLineEdit(this);
 	m_twitchChannelEdit->setPlaceholderText("channel_name");
 
 	m_twitchEnabledCheck = new QCheckBox("Enabled", this);
 	m_twitchEnabledCheck->setChecked(true);
 
-	twitchLayout->addRow("OAuth Token:", m_twitchOAuthEdit);
 	twitchLayout->addRow("Channel:", m_twitchChannelEdit);
 	twitchLayout->addRow("", m_twitchEnabledCheck);
 	m_twitchGroup->setLayout(twitchLayout);
@@ -45,11 +40,15 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 	m_youtubeChannelIdEdit = new QLineEdit(this);
 	m_youtubeChannelIdEdit->setPlaceholderText("UC...");
 
+	m_youtubeRTMPURLEdit = new QLineEdit(this);
+	m_youtubeRTMPURLEdit->setPlaceholderText("rtmp://...");
+
 	m_youtubeEnabledCheck = new QCheckBox("Enabled", this);
 	m_youtubeEnabledCheck->setChecked(true);
 
 	youtubeLayout->addRow("API Key:", m_youtubeAPIKeyEdit);
 	youtubeLayout->addRow("Channel ID:", m_youtubeChannelIdEdit);
+	youtubeLayout->addRow("RTMP URL:", m_youtubeRTMPURLEdit);
 	youtubeLayout->addRow("", m_youtubeEnabledCheck);
 	m_youtubeGroup->setLayout(youtubeLayout);
 
@@ -94,9 +93,7 @@ void SettingsDialog::loadSettings()
 			QString key = parts[0].trimmed();
 			QString value = parts[1].trimmed();
 
-			if (key == "twitch_oauth") {
-				m_twitchOAuthEdit->setText(value);
-			} else if (key == "twitch_channel") {
+			if (key == "twitch_channel") {
 				m_twitchChannelEdit->setText(value);
 			} else if (key == "twitch_enabled") {
 				m_twitchEnabledCheck->setChecked(value == "true");
@@ -104,6 +101,8 @@ void SettingsDialog::loadSettings()
 				m_youtubeAPIKeyEdit->setText(value);
 			} else if (key == "youtube_channelid") {
 				m_youtubeChannelIdEdit->setText(value);
+			} else if (key == "youtube_rtmp_url") {
+				m_youtubeRTMPURLEdit->setText(value);
 			} else if (key == "youtube_enabled") {
 				m_youtubeEnabledCheck->setChecked(value == "true");
 			}
@@ -125,11 +124,11 @@ void SettingsDialog::saveSettings()
 
 	if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
 		QTextStream out(&file);
-		out << "twitch_oauth=" << m_twitchOAuthEdit->text() << "\n";
 		out << "twitch_channel=" << m_twitchChannelEdit->text() << "\n";
 		out << "twitch_enabled=" << (m_twitchEnabledCheck->isChecked() ? "true" : "false") << "\n";
 		out << "youtube_apikey=" << m_youtubeAPIKeyEdit->text() << "\n";
 		out << "youtube_channelid=" << m_youtubeChannelIdEdit->text() << "\n";
+		out << "youtube_rtmp_url=" << m_youtubeRTMPURLEdit->text() << "\n";
 		out << "youtube_enabled=" << (m_youtubeEnabledCheck->isChecked() ? "true" : "false") << "\n";
 		file.close();
 	}

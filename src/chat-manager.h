@@ -17,7 +17,7 @@ public:
 
 	void setChatWidget(ChatDock *dock);
 
-	void connectTwitch(const QString &username, const QString &oauthToken, const QString &channel);
+	void connectTwitch(const QString &channel);
 	void disconnectTwitch();
 
 	void connectYouTube(const QString &apiKey, const QString &channelId);
@@ -33,9 +33,10 @@ public:
 	void applySettings();
 
 	void setTwitchChannel(const QString &channel) { m_twitchChannel = channel; }
-	void setTwitchOAuth(const QString &token) { m_twitchOAuth = token; }
 	void setYouTubeAPIKey(const QString &key) { m_youtubeAPIKey = key; }
 	void setYouTubeChannelId(const QString &id) { m_youtubeChannelId = id; }
+	void setYouTubeRTMPUrl(const QString &url) { m_youtubeRTMPUrl = url; }
+	QString getYouTubeRTMPUrl() const { return m_youtubeRTMPUrl; }
 
 signals:
 	void twitchConnectedChanged(bool connected);
@@ -56,12 +57,11 @@ private:
 	std::unique_ptr<TwitchIRC> m_twitchIRC;
 	std::unique_ptr<YouTubeChat> m_youtubeChat;
 
-	QString m_twitchUsername;
-	QString m_twitchOAuth;
 	QString m_twitchChannel;
 
 	QString m_youtubeAPIKey;
 	QString m_youtubeChannelId;
+	QString m_youtubeRTMPUrl;
 
 	bool m_twitchEnabled = true;
 	bool m_youtubeEnabled = true;
