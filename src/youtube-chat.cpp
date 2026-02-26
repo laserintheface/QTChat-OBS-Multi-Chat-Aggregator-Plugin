@@ -31,11 +31,14 @@ void YouTubeChat::connectToChannel(const QString &apiKey, const QString &channel
 
 void YouTubeChat::disconnect()
 {
+	// Block signals to prevent emitting signals during shutdown
+	blockSignals(true);
+
 	m_pollTimer->stop();
 	m_connected = false;
 	m_hasLiveChat = false;
 
-	emit disconnected();
+	// Don't emit signals during shutdown - we're being destroyed
 }
 
 void YouTubeChat::fetchLiveChatId()

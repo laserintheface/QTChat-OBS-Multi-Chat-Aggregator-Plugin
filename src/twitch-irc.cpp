@@ -57,6 +57,9 @@ void TwitchIRC::connectToChannel(const QString &username, const QString &oauthTo
 
 void TwitchIRC::disconnect()
 {
+	// Block signals to prevent emitting signals during shutdown
+	blockSignals(true);
+
 	m_reconnectEnabled = false;
 	m_reconnectTimer->stop();
 	m_pingTimer->stop();
@@ -69,7 +72,7 @@ void TwitchIRC::disconnect()
 	}
 
 	m_connected = false;
-	emit disconnected();
+	// Don't emit signals during shutdown - we're being destroyed
 }
 
 void TwitchIRC::onConnected()

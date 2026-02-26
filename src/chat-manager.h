@@ -23,6 +23,8 @@ public:
 	void connectYouTube(const QString &apiKey, const QString &channelId);
 	void disconnectYouTube();
 
+	void disconnectAll();
+
 	void enablePlatform(RTMPDetector::Platform platform, bool enabled);
 
 	bool isTwitchConnected() const;

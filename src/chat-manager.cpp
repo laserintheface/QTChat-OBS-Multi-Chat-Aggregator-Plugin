@@ -65,6 +65,20 @@ void ChatManager::disconnectYouTube()
 	m_youtubeChat->disconnect();
 }
 
+void ChatManager::disconnectAll()
+{
+	// Disconnect Qt signals first to prevent any callbacks during shutdown
+	if (m_twitchIRC) {
+		m_twitchIRC->disconnect();
+	}
+	if (m_youtubeChat) {
+		m_youtubeChat->disconnect();
+	}
+
+	// Clear the chat dock pointer to prevent any late callbacks
+	m_chatDock = nullptr;
+}
+
 void ChatManager::enablePlatform(RTMPDetector::Platform platform, bool enabled)
 {
 	switch (platform) {

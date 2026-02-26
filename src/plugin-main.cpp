@@ -92,13 +92,26 @@ void QTChatPlugin::unload()
 {
 	blog(LOG_INFO, "[QTChat] Unloading plugin...");
 
+	// Remove event callback first to prevent any race conditions
 	obs_frontend_remove_event_callback(obs_frontend_event_callback, nullptr);
 
+	// Stop RTMPDetector first - it has a timer that could fire during shutdown
+	if (m_rtmpDetector) {
+		m_rtmpDetector->stopDetection();
+	}
+
+	// Disconnect chat connections before destroying objects
+	if (m_chatManager) {
+		m_chatManager->disconnectAll();
+	}
+
+	// Close and reset settings dialog
 	if (m_settingsDialog) {
 		m_settingsDialog->close();
 		m_settingsDialog.reset();
 	}
 
+	// Remove dock from main window and reset
 	if (m_chatDock) {
 		QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 		if (mainWindow) {
@@ -107,6 +120,7 @@ void QTChatPlugin::unload()
 		m_chatDock.reset();
 	}
 
+	// Clean up menu
 	if (m_menu) {
 		QMainWindow *mainWindow = (QMainWindow *)obs_frontend_get_main_window();
 		QMenuBar *menuBar = mainWindow ? mainWindow->menuBar() : nullptr;
@@ -117,8 +131,9 @@ void QTChatPlugin::unload()
 		m_menu = nullptr;
 	}
 
-	m_chatManager.reset();
+	// Reset in reverse order of creation
 	m_rtmpDetector.reset();
+	m_chatManager.reset();
 
 	blog(LOG_INFO, "[QTChat] Plugin unloaded");
 }
