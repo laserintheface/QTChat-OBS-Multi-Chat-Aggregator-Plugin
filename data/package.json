@@ -1,0 +1,8 @@
+{
+    "$schema": "https://raw.githubusercontent.com/obsproject/obs-studio/master/plugins/rtmp-services/package-schema.json",
+    "name": "QTChat",
+    "version": "1.0.0",
+    "author": "QTChat",
+    "description": "Multi-chat aggregator for OBS Studio - Routes Twitch and YouTube chat into a single dockable window",
+    "url": "https://github.com/Signal-Six/QTChat-OBS-Multi-Chat-Aggregator-Plugin"
+}
