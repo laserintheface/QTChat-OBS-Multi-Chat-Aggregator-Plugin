@@ -12,6 +12,9 @@
 #include <QDockWidget>
 #include <QMessageBox>
 
+OBS_DECLARE_MODULE()
+// OBS_MODULE_USE_DEFAULT_LOCALE("QTChat", "en-US")
+
 QTChatPlugin *QTChatPlugin::s_instance = nullptr;
 
 static void obs_frontend_event_callback(enum obs_frontend_event event, void *data)
