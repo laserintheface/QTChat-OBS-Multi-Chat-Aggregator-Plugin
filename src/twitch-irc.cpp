@@ -76,6 +76,44 @@ void TwitchIRC::disconnect()
 	// Don't emit signals during shutdown - we're being destroyed
 }
 
+QString TwitchIRC::parseChannelName(const QString &input)
+{
+	QString trimmed = input.trimmed();
+
+	// Handle empty input
+	if (trimmed.isEmpty()) {
+		return "";
+	}
+
+	// Remove leading # if present
+	if (trimmed.startsWith("#")) {
+		trimmed = trimmed.mid(1);
+	}
+
+	// Check if it's a URL and extract channel name
+	if (trimmed.contains("twitch.tv/", Qt::CaseInsensitive)) {
+		int pos = trimmed.lastIndexOf("twitch.tv/", -1, Qt::CaseInsensitive);
+		QString afterDomain = trimmed.mid(pos + 10); // Length of "twitch.tv/"
+		// Remove any leading slashes or path
+		int slashPos = afterDomain.indexOf("/");
+		if (slashPos != -1) {
+			trimmed = afterDomain.left(slashPos);
+		} else {
+			trimmed = afterDomain;
+		}
+	}
+
+	// Remove any trailing slashes
+	while (trimmed.endsWith("/")) {
+		trimmed.chop(1);
+	}
+
+	blog(LOG_INFO, "[TwitchIRC] Parsed channel name: '%s' from input: '%s'",
+	     qPrintable(trimmed), qPrintable(input));
+
+	return trimmed.toLower();
+}
+
 void TwitchIRC::onConnected()
 {
 	blog(LOG_INFO, "[TwitchIRC] Connected to Twitch IRC");

@@ -18,6 +18,8 @@ public:
 	void connectToChannel(const QString &username, const QString &oauthToken, const QString &channel);
 	void disconnect();
 
+	static QString parseChannelName(const QString &input);
+
 	bool isConnected() const { return m_connected; }
 	QString getChannel() const { return m_channel; }
 

@@ -19,11 +19,23 @@ QTChatPlugin *QTChatPlugin::s_instance = nullptr;
 
 static void obs_frontend_event_callback(enum obs_frontend_event event, void *data)
 {
-	if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING) {
-		QTChatPlugin *plugin = QTChatPlugin::getInstance();
-		if (plugin) {
-			plugin->onObsReady();
-		}
+	QTChatPlugin *plugin = QTChatPlugin::getInstance();
+	if (!plugin) {
+		return;
+	}
+
+	switch (event) {
+	case OBS_FRONTEND_EVENT_FINISHED_LOADING:
+		plugin->onObsReady();
+		break;
+	case OBS_FRONTEND_EVENT_STREAMING_STARTED:
+		plugin->onStreamStarted();
+		break;
+	case OBS_FRONTEND_EVENT_STREAMING_STOPPED:
+		plugin->onStreamStopped();
+		break;
+	default:
+		break;
 	}
 }
 

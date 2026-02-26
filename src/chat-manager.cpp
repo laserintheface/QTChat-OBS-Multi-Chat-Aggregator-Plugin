@@ -1,4 +1,5 @@
 #include "chat-manager.h"
+#include "twitch-irc.h"
 #include <obs-module.h>
 
 ChatManager::ChatManager(QObject *parent)
@@ -33,11 +34,18 @@ void ChatManager::connectTwitch(const QString &channel)
 		return;
 	}
 
-	m_twitchChannel = channel;
+	// Parse channel name - handle both plain names and URLs
+	QString parsedChannel = TwitchIRC::parseChannelName(channel);
+	if (parsedChannel.isEmpty()) {
+		blog(LOG_WARNING, "[ChatManager] Invalid Twitch channel name: '%s'", qPrintable(channel));
+		return;
+	}
 
-	blog(LOG_INFO, "[ChatManager] Connecting to Twitch: %s", qPrintable(channel));
+	m_twitchChannel = parsedChannel;
+
+	blog(LOG_INFO, "[ChatManager] Connecting to Twitch: %s", qPrintable(parsedChannel));
 	// No OAuth needed - uses anonymous connection for read-only chat
-	m_twitchIRC->connectToChannel("", "", channel);
+	m_twitchIRC->connectToChannel("", "", parsedChannel);
 }
 
 void ChatManager::disconnectTwitch()
@@ -159,4 +167,36 @@ void ChatManager::onYouTubeDisconnected()
 void ChatManager::onOutputDetected(const QString &url, RTMPDetector::Platform platform)
 {
 	blog(LOG_INFO, "[ChatManager] Output detected: %s (platform: %d)", qPrintable(url), (int)platform);
+
+	switch (platform) {
+	case RTMPDetector::Platform::Twitch:
+		if (!m_twitchEnabled) {
+			blog(LOG_INFO, "[ChatManager] Twitch detected but platform is disabled, enabling...");
+			enablePlatform(RTMPDetector::Platform::Twitch, true);
+		}
+		if (!m_twitchChannel.isEmpty()) {
+			blog(LOG_INFO, "[ChatManager] Twitch platform detected, connecting to channel: %s",
+			     qPrintable(m_twitchChannel));
+			connectTwitch(m_twitchChannel);
+		} else {
+			blog(LOG_WARNING, "[ChatManager] Twitch detected but no channel configured in settings");
+		}
+		break;
+
+	case RTMPDetector::Platform::YouTube:
+		if (!m_youtubeEnabled) {
+			blog(LOG_INFO, "[ChatManager] YouTube detected but platform is disabled, enabling...");
+			enablePlatform(RTMPDetector::Platform::YouTube, true);
+		}
+		if (!m_youtubeAPIKey.isEmpty() && !m_youtubeChannelId.isEmpty()) {
+			blog(LOG_INFO, "[ChatManager] YouTube platform detected, connecting...");
+			connectYouTube(m_youtubeAPIKey, m_youtubeChannelId);
+		} else {
+			blog(LOG_WARNING, "[ChatManager] YouTube detected but API key or channel ID not configured");
+		}
+		break;
+
+	default:
+		break;
+	}
 }
