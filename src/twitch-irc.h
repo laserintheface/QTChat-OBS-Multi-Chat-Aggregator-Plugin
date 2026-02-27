@@ -3,8 +3,6 @@
 #include <QObject>
 #include <QString>
 #include <QTimer>
-#include <QQueue>
-#include <QMutex>
 #include <QTcpSocket>
 #include "chat-message.h"
 
@@ -42,8 +40,7 @@ private:
 	void sendJoin(const QString &channel);
 	void sendPong(const QString &server);
 	void parseMessage(const QString &rawMessage);
-	ChatMessage parsePrivmsg(const QString &message, const QString &prefix);
-	void processMessageQueue();
+	ChatMessage parsePrivmsg(const QString &message);
 
 	QTcpSocket *m_socket = nullptr;
 	QString m_username;
@@ -59,7 +56,4 @@ private:
 
 	QTimer *m_reconnectTimer = nullptr;
 	QTimer *m_pingTimer = nullptr;
-
-	QQueue<QString> m_messageQueue;
-	QMutex m_queueMutex;
 };

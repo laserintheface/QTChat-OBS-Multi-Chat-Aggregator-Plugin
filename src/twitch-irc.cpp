@@ -225,13 +225,13 @@ void TwitchIRC::sendPong(const QString &server)
 
 void TwitchIRC::parseMessage(const QString &rawMessage)
 {
-	ChatMessage msg = parsePrivmsg(rawMessage, "");
+	ChatMessage msg = parsePrivmsg(rawMessage);
 	if (!msg.message.isEmpty()) {
 		emit messageReceived(msg);
 	}
 }
 
-ChatMessage TwitchIRC::parsePrivmsg(const QString &message, const QString &prefix)
+ChatMessage TwitchIRC::parsePrivmsg(const QString &message)
 {
 	Q_UNUSED(prefix);
 
@@ -239,57 +239,64 @@ ChatMessage TwitchIRC::parsePrivmsg(const QString &message, const QString &prefi
 	msg.platform = "twitch";
 	msg.timestamp = QDateTime::currentDateTime();
 
-	int colonPos = message.indexOf(":");
-	if (colonPos == -1)
+	int firstColonPos = message.indexOf(":");
+	if (firstColonPos == -1)
 		return msg;
 
-	QString trailing = message.mid(colonPos + 1);
-
-	int exclamationPos = trailing.indexOf("!");
-	if (exclamationPos == -1)
+	int prefixEndPos = message.indexOf(" ", firstColonPos);
+	if (prefixEndPos == -1)
 		return msg;
 
-	msg.username = trailing.left(exclamationPos);
+	QString prefix = message.mid(firstColonPos + 1, prefixEndPos - firstColonPos - 1);
 
-	int spacePos = trailing.indexOf(" ");
-	if (spacePos == -1)
-		return msg;
-
-	trailing = trailing.mid(spacePos + 1);
-
-	if (!trailing.startsWith("PRIVMSG")) {
-		return msg;
+	int exclamationPos = prefix.indexOf("!");
+	if (exclamationPos != -1) {
+		msg.username = prefix.left(exclamationPos);
 	}
 
-	int colonPos2 = trailing.indexOf(":");
-	if (colonPos2 == -1)
+	int messageStart = message.indexOf("PRIVMSG #", firstColonPos);
+	if (messageStart == -1)
 		return msg;
 
-	msg.message = trailing.mid(colonPos2 + 1);
+	messageStart = message.indexOf(":", messageStart);
+	if (messageStart == -1)
+		return msg;
 
-	int colorStart = message.indexOf("color=");
-	if (colorStart != -1) {
-		QString colorName = message.mid(colorStart + 6);
-		int colorEnd = colorName.indexOf(";");
-		if (colorEnd != -1) {
-			colorName = colorName.left(colorEnd);
+	msg.message = message.mid(messageStart + 1);
+
+	int atPos = message.indexOf("@");
+	if (atPos != -1) {
+		QString tags = message.mid(atPos + 1, firstColonPos - atPos - 1);
+
+		int colorStart = tags.indexOf("color=");
+		if (colorStart != -1) {
+			int colorEnd = tags.indexOf(";", colorStart);
+			QString colorName;
+			if (colorEnd != -1) {
+				colorName = tags.mid(colorStart + 6, colorEnd - colorStart - 6);
+			} else {
+				colorName = tags.mid(colorStart + 6);
+			}
+			if (!colorName.isEmpty() && TwitchUsernameColors.contains(colorName)) {
+				msg.usernameColor = TwitchUsernameColors.value(colorName);
+			}
 		}
-		if (TwitchUsernameColors.contains(colorName)) {
-			msg.usernameColor = TwitchUsernameColors.value(colorName);
-		}
-	}
 
-	if (message.contains("subscriber=1")) {
-		msg.isSubscriber = true;
-	}
-	if (message.contains("mod=1")) {
-		msg.isModerator = true;
-	}
-	if (message.contains("user-type=mod")) {
-		msg.isModerator = true;
-	}
-	if (message.contains("vip=1")) {
-		msg.isVip = true;
+		if (tags.contains("subscriber=1")) {
+			msg.isSubscriber = true;
+		}
+		if (tags.contains("user-type=mod")) {
+			msg.isModerator = true;
+		}
+		if (tags.contains("user-type=global_mod")) {
+			msg.isModerator = true;
+		}
+		if (tags.contains("user-type=admin")) {
+			msg.isModerator = true;
+		}
+		if (tags.contains("user-type=broadcaster")) {
+			msg.isBroadcaster = true;
+		}
 	}
 
 	if (msg.usernameColor == QColor()) {
@@ -299,16 +306,4 @@ ChatMessage TwitchIRC::parsePrivmsg(const QString &message, const QString &prefi
 	}
 
 	return msg;
-}
-
-void TwitchIRC::processMessageQueue()
-{
-	m_queueMutex.lock();
-	while (!m_messageQueue.isEmpty()) {
-		QString msg = m_messageQueue.dequeue();
-		m_queueMutex.unlock();
-		parseMessage(msg);
-		m_queueMutex.lock();
-	}
-	m_queueMutex.unlock();
 }
