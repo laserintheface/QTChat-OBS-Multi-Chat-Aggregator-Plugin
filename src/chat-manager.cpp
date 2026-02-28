@@ -117,30 +117,11 @@ void ChatManager::applySettings()
 {
 	blog(LOG_INFO, "[ChatManager] applySettings() called");
 
-	QString newTwitchChannel = m_twitchChannel;
-	bool newTwitchEnabled = m_twitchEnabled;
-
-	if (m_settingsDialog) {
-		newTwitchChannel = m_settingsDialog->getTwitchChannel();
-		newTwitchEnabled = m_settingsDialog->isTwitchEnabled();
-	}
-
-	bool twitchSettingsChanged = (newTwitchChannel != m_twitchChannel) || 
-	                             (newTwitchEnabled != m_twitchEnabled);
-
-	m_twitchChannel = newTwitchChannel;
-	m_twitchEnabled = newTwitchEnabled;
-
-	blog(LOG_INFO, "[ChatManager] applySettings - m_twitchEnabled=%d, m_twitchChannel='%s' (changed=%d)",
-	     m_twitchEnabled, qPrintable(m_twitchChannel), twitchSettingsChanged);
-
-	if (twitchSettingsChanged) {
-		disconnectTwitch();
-		disconnectYouTube();
-	}
+	blog(LOG_INFO, "[ChatManager] applySettings - m_twitchEnabled=%d, m_twitchChannel='%s'",
+	     m_twitchEnabled, qPrintable(m_twitchChannel));
 
 	if (m_twitchEnabled && !m_twitchChannel.isEmpty()) {
-		if (twitchSettingsChanged || !m_twitchIRC->isConnected()) {
+		if (!m_twitchIRC->isConnected()) {
 			blog(LOG_INFO, "[ChatManager] applySettings - calling connectTwitch()");
 			connectTwitch(m_twitchChannel);
 		} else {
