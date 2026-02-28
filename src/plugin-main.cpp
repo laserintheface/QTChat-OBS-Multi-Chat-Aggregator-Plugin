@@ -42,7 +42,8 @@ static void obs_frontend_event_callback(enum obs_frontend_event event, void *dat
 QTChatPlugin::QTChatPlugin()
 	: QObject(),
 	  m_chatManager(std::make_unique<ChatManager>()),
-	  m_rtmpDetector(std::make_unique<RTMPDetector>())
+	  m_rtmpDetector(std::make_unique<RTMPDetector>()),
+	  m_settingsApplied(false)
 {
 	s_instance = this;
 }
@@ -100,7 +101,14 @@ void QTChatPlugin::onObsReady()
 
 void QTChatPlugin::applySettings()
 {
-	blog(LOG_INFO, "[QTChatPlugin] applySettings() called");
+	blog(LOG_INFO, "[QTChatPlugin] applySettings() called (already applied: %d)", m_settingsApplied);
+
+	if (m_settingsApplied) {
+		blog(LOG_INFO, "[QTChatPlugin] Settings already applied, skipping duplicate call");
+		return;
+	}
+
+	m_settingsApplied = true;
 
 	if (m_settingsDialog) {
 		// Transfer settings from dialog to ChatManager

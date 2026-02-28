@@ -52,7 +52,8 @@ void TwitchIRC::connectToChannel(const QString &username, const QString &oauthTo
 	blog(LOG_INFO, "[TwitchIRC] Attempting to connect to channel: '%s' (server: %s, port: %d)",
 	     qPrintable(m_channel), qPrintable(m_server), m_port);
 
-	if (m_socket->isOpen()) {
+	if (m_socket->isOpen() || m_socket->state() == QAbstractSocket::ConnectingState) {
+		blog(LOG_INFO, "[TwitchIRC] Already connected or connecting, closing existing connection first");
 		m_socket->close();
 	}
 

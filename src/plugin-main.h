@@ -49,6 +49,8 @@ private:
 	QAction *m_settingsAction = nullptr;
 	QAction *m_toggleDockAction = nullptr;
 
+	bool m_settingsApplied = false;
+
 	static QTChatPlugin *s_instance;
 };
 

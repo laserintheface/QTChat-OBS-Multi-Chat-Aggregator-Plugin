@@ -117,22 +117,44 @@ void ChatManager::applySettings()
 {
 	blog(LOG_INFO, "[ChatManager] applySettings() called");
 
-	disconnectTwitch();
-	disconnectYouTube();
+	QString newTwitchChannel = m_twitchChannel;
+	bool newTwitchEnabled = m_twitchEnabled;
 
-	blog(LOG_INFO, "[ChatManager] applySettings - m_twitchEnabled=%d, m_twitchChannel='%s'",
-	     m_twitchEnabled, qPrintable(m_twitchChannel));
+	if (m_settingsDialog) {
+		newTwitchChannel = m_settingsDialog->getTwitchChannel();
+		newTwitchEnabled = m_settingsDialog->isTwitchEnabled();
+	}
+
+	bool twitchSettingsChanged = (newTwitchChannel != m_twitchChannel) || 
+	                             (newTwitchEnabled != m_twitchEnabled);
+
+	m_twitchChannel = newTwitchChannel;
+	m_twitchEnabled = newTwitchEnabled;
+
+	blog(LOG_INFO, "[ChatManager] applySettings - m_twitchEnabled=%d, m_twitchChannel='%s' (changed=%d)",
+	     m_twitchEnabled, qPrintable(m_twitchChannel), twitchSettingsChanged);
+
+	if (twitchSettingsChanged) {
+		disconnectTwitch();
+		disconnectYouTube();
+	}
 
 	if (m_twitchEnabled && !m_twitchChannel.isEmpty()) {
-		blog(LOG_INFO, "[ChatManager] applySettings - calling connectTwitch()");
-		connectTwitch(m_twitchChannel);
+		if (twitchSettingsChanged || !m_twitchIRC->isConnected()) {
+			blog(LOG_INFO, "[ChatManager] applySettings - calling connectTwitch()");
+			connectTwitch(m_twitchChannel);
+		} else {
+			blog(LOG_INFO, "[ChatManager] applySettings - Twitch already connected, skipping");
+		}
 	} else {
 		blog(LOG_WARNING, "[ChatManager] applySettings - NOT connecting Twitch (enabled=%d, channel='%s')",
 		     m_twitchEnabled, qPrintable(m_twitchChannel));
 	}
 
 	if (m_youtubeEnabled && !m_youtubeAPIKey.isEmpty() && !m_youtubeChannelId.isEmpty()) {
-		connectYouTube(m_youtubeAPIKey, m_youtubeChannelId);
+		if (!m_youtubeChat->isConnected()) {
+			connectYouTube(m_youtubeAPIKey, m_youtubeChannelId);
+		}
 	}
 }
 
