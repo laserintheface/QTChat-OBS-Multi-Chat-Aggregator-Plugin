@@ -233,8 +233,6 @@ void TwitchIRC::parseMessage(const QString &rawMessage)
 
 ChatMessage TwitchIRC::parsePrivmsg(const QString &message)
 {
-	Q_UNUSED(prefix);
-
 	ChatMessage msg;
 	msg.platform = "twitch";
 	msg.timestamp = QDateTime::currentDateTime();

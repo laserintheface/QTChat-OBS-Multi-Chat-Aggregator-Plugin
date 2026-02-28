@@ -52,7 +52,3 @@ private:
 	QTimer *m_scrollTimer = nullptr;
 	bool m_autoScroll = true;
 };
-
-#include <QPushButton>
-
-#include <QPushButton>
