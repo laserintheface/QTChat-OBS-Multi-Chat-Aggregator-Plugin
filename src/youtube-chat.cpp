@@ -145,7 +145,7 @@ void YouTubeChat::pollMessages()
 	QUrlQuery query;
 	query.addQueryItem("part", "snippet,authorDetails");
 	query.addQueryItem("liveChatId", m_liveChatId);
-	query.addQueryItem("maxResults", "50");
+	query.addQueryItem("maxResults", "200");
 	if (!m_nextPageToken.isEmpty()) {
 		query.addQueryItem("pageToken", m_nextPageToken);
 	}
