@@ -103,10 +103,7 @@ void QTChatPlugin::applySettings()
 {
 	blog(LOG_INFO, "[QTChatPlugin] applySettings() called (already applied: %d)", m_settingsApplied);
 
-	if (m_settingsApplied) {
-		blog(LOG_INFO, "[QTChatPlugin] Settings already applied, skipping duplicate call");
-		return;
-	}
+
 
 	m_settingsApplied = true;
 
