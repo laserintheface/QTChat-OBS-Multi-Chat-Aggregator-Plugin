@@ -1,0 +1,30 @@
+{
+  "base_commit": "bc18ab3fbb87a697736acd5eb53278f7ea12b298",
+  "update_commit": "40901cd9a77ec1acb8a43c74fcda31495b4802ab",
+  "files": {
+    ".github/workflows/build-project.yaml": "2cd08f47ac45384ff1392a68d39b388d24856d0fa6f9dc7d5743fc7bb9d8b308",
+    "CMakeLists.txt": "b3b195c620e995c14ebf8340dc219d7c16021f51e9343e2218fa167f519264ca",
+    "REMAKE.md": "402d793346fc7d996487e6eae2548e19aa727a799c0a9c82a59a867bf4044c69",
+    "buildspec.json": "b7be2941297e508d034aedf78ac783fea7063232706e16ee97875cc016e19799",
+    "src/chat-dock.cpp": "2a97d85c0d79896e818c495bba3da79713cafde2c8ade313d8c541b36b196b26",
+    "src/chat-dock.h": "fba6157770740be8b3de2f08a14ba11dc7a2f100f5814d04e963db1e979156d0",
+    "src/chat-manager.cpp": "e40ffec366ee45b0bde99a632de014d81d79687d8fb9bc5f5e1b5588e5c90aa8",
+    "src/chat-manager.h": "fe809cf64fffe1887a7725f90448b8b39423f503142c4a72b2ed51ab36a5c3b7",
+    "src/chat-message.h": "4a280c31dd431eba965b3e3c8e28a5d5b2bf9baedaf6261f95d06cdd5ac9a666",
+    "src/plugin-main.cpp": "be192d2f20154d2641b515181da655bcda39677e60ea56846190cb8d5a6c5249",
+    "src/settings-dialog.cpp": "168995fe7d5e0bcc9d97b6b6012443d952605258e1bacda2060b91cbcecff98c",
+    "src/settings-dialog.h": "2c453a6bdfd4b7c023ec961915950a9054bd73ca7b7b9c301004d34b5f011d43",
+    "src/twitch-irc.cpp": "1c653105e99402c9fcb15a6b8f11681a544b05b86912f5ae92baea3278176c5b",
+    "src/twitch-irc.h": "816ff67b23ad156ff0b3acb3273ffa3e5a44052d1a05343f3325cba0439bfff4",
+    "src/util/log.h": "1ed710c9db264644de022017a7cc2335d2b73196d6738bad10466b172557126a",
+    "src/youtube-chat.cpp": "6cc4aa5ac9eb6fe73cd66556f689f1a0508ecd2677ba702cce7120033d01b784",
+    "src/youtube-chat.h": "9d80514e64a1d99462450b5b9585e9b7e9878db455832d6b2e2f32c270d736c6",
+    "src/youtube-wire.h": "9155dfa1b55aa8951fe785807595fb8684579cac54e05e69f15f061f07d0c5e1",
+    "tests/CMakeLists.txt": "aae1c2ec5e47a74f6cd058b3a6f5d8ff6c15d74be357afffd2ab313e0a729d24",
+    "tests/grpc-smoke.cpp": "21e011128676f30415951ca1851d0193c769bb8f2cb2255dc7eafec4042e5ef1",
+    "tests/log-stub.cpp": "d7f3c8cd2ce87b7957898cb75e76414d3deb241787366d212bd9bee3e6a91cee",
+    "tests/stubs/obs-module.h": "92777ba44d11f8c2e8cf87bb9f3f9abe5caa6cc640595155203910be3c3b7070",
+    "tests/test-youtube.cpp": "3bb7cc6244ae1dbc532f4beef51894923f137a7c0131c74a552a05f923e20cbf"
+  },
+  "validation": "Linux source compilation and automated checks passed; Windows build and authenticated broadcast test pending."
+}

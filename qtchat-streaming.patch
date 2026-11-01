@@ -1,0 +1,2016 @@
+diff --git a/.github/workflows/build-project.yaml b/.github/workflows/build-project.yaml
+index 668594b..229cb00 100644
+--- a/.github/workflows/build-project.yaml
++++ b/.github/workflows/build-project.yaml
+@@ -70,10 +70,23 @@ jobs:
+           plugin_name="$(jq -r '.name' buildspec.json)"
+           echo "pluginName=${plugin_name}" >> "$GITHUB_OUTPUT"
+ 
++  test:
++    name: Test chat transport
++    runs-on: ubuntu-24.04
++    steps:
++      - uses: actions/checkout@v4
++      - name: Install test dependencies
++        run: sudo apt-get update && sudo apt-get install -y qt6-base-dev libobs-dev
++      - name: Build and test
++        run: |
++          cmake -S tests -B test-build
++          cmake --build test-build --parallel 2
++          ctest --test-dir test-build --output-on-failure
++
+   windows-build:
+     name: Build for Windows
+     runs-on: windows-2022
+-    needs: check-event
++    needs: [check-event, test]
+     defaults:
+       run:
+         shell: pwsh
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 2581a0d..092febc 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -41,19 +41,9 @@ if(ENABLE_FRONTEND_API)
+ endif()
+ 
+ if(ENABLE_QT)
+-  find_package(Qt6 COMPONENTS Widgets Core Network)
+-  if(NOT Qt6_FOUND)
+-    find_package(Qt5 REQUIRED COMPONENTS Widgets Network)
+-    set(USE_QT5 ON)
+-  endif()
+-  
+-  if(USE_QT5)
+-    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt5::Widgets Qt5::Network)
+-    target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE QT_DEPRECATED_WARNINGS)
+-  else()
+-    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets Qt6::Network)
+-    set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES AUTOMOC ON)
+-  endif()
++  find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Core Network)
++  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets Qt6::Network)
++  set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES AUTOMOC ON)
+ endif()
+ 
+ # Create precompiled header
+@@ -73,6 +63,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
+   ./src/chat-manager.cpp
+   ./src/twitch-irc.h
+   ./src/twitch-irc.cpp
++  ./src/youtube-wire.h
+   ./src/youtube-chat.h
+   ./src/youtube-chat.cpp
+   ./src/rtmp-detector.h
+@@ -92,5 +83,5 @@ set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_nam
+ 
+ if(WIN32)
+   set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES SUFFIX ".dll")
+-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE user32.lib)
++  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE user32.lib crypt32.lib)
+ endif()
+diff --git a/REMAKE.md b/REMAKE.md
+new file mode 100644
+index 0000000..bd9f1fc
+--- /dev/null
++++ b/REMAKE.md
+@@ -0,0 +1,70 @@
++# QTChat 1.1 streaming remake
++
++This source update replaces QTChat's repeating YouTube chat polling with the official `streamList` server stream. It keeps the native OBS dock and direct Twitch/YouTube connections. It is a preview that needs a Windows build and an authenticated live-broadcast test before relying on it for a full stream.
++
++## Build using your existing GitHub fork
++
++1. Extract `QTChat-streaming-update.zip`.
++2. Open https://github.com/laserintheface/QTChat-OBS-Multi-Chat-Aggregator-Plugin and select your main branch.
++3. Choose **Add file → Upload files**. Open the extracted `repository-files` folder and drag **its contents** into the upload area. Include the `.github`, `src`, and `tests` folders and the root files. Upload these at the repository root; do not upload the enclosing `repository-files` folder or the ZIP itself.
++4. Commit the upload. The existing **Push** workflow runs the tests and Windows build. You can also choose **Actions → Push → Run workflow**.
++5. Open the completed green run. Under **Artifacts**, download `QTChat-1.1.0-windows-x64-...`. An artifact is the downloadable output of the build. **Create Release** being skipped on an ordinary branch is expected.
++6. Extract the artifact. When you are finished streaming, close OBS, back up your current QTChat DLL, and install the plugin files using the same location as your working installation. Reopen OBS. Never replace a DLL while OBS is running.
++
++This update contains source files, not a prebuilt DLL. Keep your existing working Qt 6.11.1 TLS backend. Do not replace OBS's Qt DLLs or copy a TLS backend from a different Qt version.
++
++## Connect chat
++
++Open **QTChat → Settings**. Your existing Twitch channel and YouTube key/channel settings are read from the previous settings file.
++
++- Twitch: enter your channel name and enable it. Receiving chat uses anonymous IRC over TLS; no Twitch OAuth token is required.
++- YouTube: enter your API key and enable it. For the most predictable connection, paste the **current broadcast's video URL** into **Video URL or ID**. A video URL bypasses channel search. You can leave the channel ID blank when supplying a video URL.
++- Save. Open the dock through **QTChat → Combined** if necessary.
++- Start your YouTube broadcast with live chat enabled, then click **Reconnect YouTube** in the dock. You do not need to restart OBS. Replace an old video URL when you create a new broadcast.
++
++If you leave the video field blank, QTChat searches once for a public live broadcast on the supplied `UC...` channel ID. If none exists, it stops and waits for you to reconnect. It does not continuously search while you are offline.
++
++## What changed
++
++- YouTube server streaming with resume tokens and duplicate filtering; no fallback to `liveChatMessages.list` polling.
++- Separate connection status, useful errors, and a YouTube reconnect button.
++- Quota/authentication errors stop automatically. Temporary failures back off from 15 seconds to five minutes, with eight automatic retries per session. Manual reconnect starts a new session.
++- Repeated RTMP output detection cannot silently restart a failed YouTube connection.
++- Saving changed settings takes effect immediately. Saving unchanged active YouTube settings does not create another connection.
++- Twitch uses encrypted IRC and preserves messages split across network reads. Tagged messages, hexadecimal name colors, moderator badges, and emote tags are handled.
++- Scrolling up to read older messages no longer gets overridden by a repeating scroll timer.
++- API keys travel in request headers and are redacted from error text. Windows saves the key using DPAPI protection tied to the Windows account. Existing plaintext settings migrate when you click Save.
++
++## Privacy and limits
++
++Connections go directly to Google and Twitch. There is no added relay, analytics service, account registration, or persistent chat transcript. Chat rows remain in memory, capped at 500 per view; recent YouTube message IDs are capped at 5,000 for duplicate filtering. OBS logs connection status and channel identifiers, but this implementation does not log API keys or message contents.
++
++DPAPI protects the key at rest; software running as your Windows user can still access it. Non-Windows builds retain plaintext key storage. The legacy settings location remains `~/.config/obs-studio/qtchat-settings.ini` for compatibility. The old plugin version may not understand the protected key if you roll back; re-enter the key in that version if needed. Rotate any key previously shared in logs.
++
++YouTube API quota still applies. Opening/reopening a stream and looking up broadcasts consume quota; this is not unlimited API access. A quiet chat keeps its existing connection open. Message volume does not drive a local polling loop. Actual quota use should be checked in your Google project during the live test. A quota-exhausted project must recover quota before this version can connect.
++
++This version is read-only. It does not send messages, moderate chat, render third-party emotes, retrieve private/member-only broadcasts through OAuth, or remove previously displayed messages when moderation events occur. YouTube chat availability and the initial history returned are controlled by YouTube. The manual retry limit favors avoiding runaway requests over unattended reconnection forever. Twitch retries up to five times after failures; saving settings retries a disconnected Twitch connection.
++
++## Validation and first live test
++
++All plugin translation units compiled against real Qt 6.4.2 and OBS development headers on Linux. Automated checks cover protobuf fields, fragmented/coalesced frames, Unicode, malformed frames, duplicate filtering, resume tokens, retry limits, stale replies, key redaction, URL validation, Twitch tags, and a real local HTTP/2 stream with quota trailers. An unauthenticated TLS/HTTP2 connection to Google's actual streamList service also succeeded and returned a gRPC permission response, as expected without credentials.
++
++Windows linking, DPAPI execution, OBS dock behavior on Windows, and authenticated YouTube streaming have **not** been executed here. The included GitHub workflow compiles Windows after the Linux tests pass. No user credentials were used in testing.
++
++After installing, verify Twitch and YouTube messages appear in Combined, scroll up and check that your position remains stable, and inspect Google quota usage over a short broadcast. Try Reconnect YouTube without restarting OBS. Keep the previous DLL for rollback.
++
++## Development references
++
++- Google streamList guide and protobuf schema: https://developers.google.com/youtube/data/live/streaming-live-chat
++- streamList API reference: https://developers.google.com/youtube/v3/live/docs/liveChatMessages/streamList
++- gRPC HTTP/2 wire protocol: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
++
++`src/youtube-wire.h` implements the read-only subset of Google's published schema; Qt Network handles TLS and HTTP/2. The transport requests uncompressed gRPC messages and rejects malformed or oversized frames. It deliberately has no gRPC library dependency or polling fallback.
++
++To run local tests with Qt 6 and OBS development packages installed:
++
++```sh
++cmake -S tests -B test-build
++cmake --build test-build --parallel 2
++ctest --test-dir test-build --output-on-failure
++```
+diff --git a/buildspec.json b/buildspec.json
+index 7597696..60de988 100644
+--- a/buildspec.json
++++ b/buildspec.json
+@@ -35,7 +35,7 @@
+     },
+     "name": "QTChat",
+     "displayName": "QTChat - Multi-Chat Aggregator",
+-    "version": "1.0.0",
++    "version": "1.1.0",
+     "author": "QTChat",
+     "website": "https://github.com/Signal-Six/QTChat-OBS-Multi-Chat-Aggregator-Plugin",
+     "email": "support@qtchat.dev"
+diff --git a/src/chat-dock.cpp b/src/chat-dock.cpp
+index 0fd1ffd..d25fbbb 100644
+--- a/src/chat-dock.cpp
++++ b/src/chat-dock.cpp
+@@ -15,11 +15,17 @@ ChatDock::ChatDock(QWidget *parent) : QDockWidget("QTChat", parent)
+ 	mainLayout->setContentsMargins(4, 4, 4, 4);
+ 
+ 	QHBoxLayout *headerLayout = new QHBoxLayout();
+-	m_statusLabel = new QLabel("Disconnected", this);
++	m_statusLabel = new QLabel("Twitch: disconnected", this);
++	m_youtubeStatusLabel = new QLabel("YouTube: disconnected", this);
++	m_youtubeStatusLabel->setWordWrap(true);
++	auto *reconnect = new QPushButton("Reconnect YouTube", this);
++	connect(reconnect, &QPushButton::clicked, this, &ChatDock::reconnectYouTubeRequested);
+ 	m_clearButton = new QPushButton("Clear", this);
+ 	headerLayout->addWidget(m_statusLabel);
+ 	headerLayout->addStretch();
+ 	headerLayout->addWidget(m_clearButton);
++	mainLayout->addWidget(m_youtubeStatusLabel);
++	mainLayout->addWidget(reconnect);
+ 	mainLayout->addLayout(headerLayout);
+ 
+ 	m_tabWidget = new QTabWidget(this);
+@@ -48,7 +54,7 @@ ChatDock::ChatDock(QWidget *parent) : QDockWidget("QTChat", parent)
+ 	m_scrollTimer = new QTimer(this);
+ 	m_scrollTimer->setInterval(100);
+ 	connect(m_scrollTimer, &QTimer::timeout, this, &ChatDock::onScrollTimeout);
+-	m_scrollTimer->start();
++	// Scroll only when a new message arrives and the reader was at the bottom.
+ 
+ 	connect(m_clearButton, &QPushButton::clicked, this, &ChatDock::onClearButtonClicked);
+ 	connect(m_tabWidget, &QTabWidget::currentChanged, this, &ChatDock::onTabChanged);
+@@ -76,6 +82,7 @@ void ChatDock::addMessage(const ChatMessage &message)
+ 
+ void ChatDock::addMessageToList(QListWidget *list, const ChatMessage &message)
+ {
++	const bool follow = list->verticalScrollBar()->value() >= list->verticalScrollBar()->maximum() - 12;
+ 	QListWidgetItem *item = new QListWidgetItem(formatMessage(message), list);
+ 	item->setData(Qt::UserRole, QVariant::fromValue(message));
+ 
+@@ -93,6 +100,7 @@ void ChatDock::addMessageToList(QListWidget *list, const ChatMessage &message)
+ 	while (list->count() > m_messageLimit) {
+ 		delete list->takeItem(0);
+ 	}
++	if (follow) list->scrollToBottom();
+ }
+ 
+ QString ChatDock::formatMessage(const ChatMessage &message)
+@@ -188,3 +196,12 @@ void ChatDock::onScrollTimeout()
+ 		}
+ 	}
+ }
++
++void ChatDock::setTwitchStatus(bool connected)
++{
++    m_statusLabel->setText(connected ? "Twitch: connected" : "Twitch: disconnected");
++}
++void ChatDock::setYouTubeStatus(const QString &status)
++{
++    m_youtubeStatusLabel->setText("YouTube: " + status);
++}
+diff --git a/src/chat-dock.h b/src/chat-dock.h
+index 7f6d0d4..c63a29c 100644
+--- a/src/chat-dock.h
++++ b/src/chat-dock.h
+@@ -20,6 +20,8 @@ public:
+ 
+ 	void addMessage(const ChatMessage &message);
+ 	void clearMessages();
++	void setTwitchStatus(bool connected);
++	void setYouTubeStatus(const QString &status);
+ 	void setMessageLimit(int limit);
+ 
+ 	enum class ViewMode { Combined, Separate };
+@@ -29,6 +31,7 @@ public:
+ 
+ signals:
+ 	void messageAdded(const ChatMessage &message);
++	void reconnectYouTubeRequested();
+ 
+ private slots:
+ 	void onTabChanged(int index);
+@@ -45,6 +48,7 @@ private:
+ 	QListWidget *m_youtubeList = nullptr;
+ 	QListWidget *m_combinedList = nullptr;
+ 	QLabel *m_statusLabel = nullptr;
++	QLabel *m_youtubeStatusLabel = nullptr;
+ 	QPushButton *m_clearButton = nullptr;
+ 
+ 	ViewMode m_viewMode = ViewMode::Combined;
+diff --git a/src/chat-manager.cpp b/src/chat-manager.cpp
+index 83f3303..c1bede4 100644
+--- a/src/chat-manager.cpp
++++ b/src/chat-manager.cpp
+@@ -14,6 +14,7 @@ ChatManager::ChatManager(QObject *parent)
+ 	connect(m_youtubeChat.get(), &YouTubeChat::messageReceived, this, &ChatManager::onYouTubeMessage);
+ 	connect(m_youtubeChat.get(), &YouTubeChat::connected, this, &ChatManager::onYouTubeConnected);
+ 	connect(m_youtubeChat.get(), &YouTubeChat::disconnected, this, &ChatManager::onYouTubeDisconnected);
++	connect(m_youtubeChat.get(), &YouTubeChat::statusChanged, this, &ChatManager::youtubeStatusChanged);
+ }
+ 
+ ChatManager::~ChatManager()
+@@ -64,7 +65,8 @@ void ChatManager::connectYouTube(const QString &apiKey, const QString &channelId
+ 	m_youtubeChannelId = channelId;
+ 
+ 	blog(LOG_INFO, "[ChatManager] Connecting to YouTube: %s", qPrintable(channelId));
+-	m_youtubeChat->connectToChannel(apiKey, channelId);
++	m_youtubeAttempted = true;
++	m_youtubeChat->connectToChannel(apiKey, channelId, m_youtubeVideo);
+ }
+ 
+ void ChatManager::disconnectYouTube()
+@@ -113,30 +115,26 @@ bool ChatManager::isYouTubeConnected() const
+ 	return m_youtubeChat->isConnected();
+ }
+ 
+-void ChatManager::applySettings()
++void ChatManager::reconnectYouTube()
+ {
+-	blog(LOG_INFO, "[ChatManager] applySettings() called");
+-
+-	blog(LOG_INFO, "[ChatManager] applySettings - m_twitchEnabled=%d, m_twitchChannel='%s'",
+-	     m_twitchEnabled, qPrintable(m_twitchChannel));
+-
+-	if (m_twitchEnabled && !m_twitchChannel.isEmpty()) {
+-		if (!m_twitchIRC->isConnected()) {
+-			blog(LOG_INFO, "[ChatManager] applySettings - calling connectTwitch()");
+-			connectTwitch(m_twitchChannel);
+-		} else {
+-			blog(LOG_INFO, "[ChatManager] applySettings - Twitch already connected, skipping");
+-		}
+-	} else {
+-		blog(LOG_WARNING, "[ChatManager] applySettings - NOT connecting Twitch (enabled=%d, channel='%s')",
+-		     m_twitchEnabled, qPrintable(m_twitchChannel));
+-	}
++    m_youtubeChat->disconnect();
++    if (m_youtubeEnabled) connectYouTube(m_youtubeAPIKey, m_youtubeChannelId);
++    else emit youtubeStatusChanged("Disabled");
++}
+ 
+-	if (m_youtubeEnabled && !m_youtubeAPIKey.isEmpty() && !m_youtubeChannelId.isEmpty()) {
+-		if (!m_youtubeChat->isConnected()) {
+-			connectYouTube(m_youtubeAPIKey, m_youtubeChannelId);
+-		}
+-	}
++void ChatManager::applySettings()
++{
++    if (m_twitchEnabled && !m_twitchChannel.trimmed().isEmpty()) {
++        const auto channel = TwitchIRC::parseChannelName(m_twitchChannel);
++        if (m_twitchIRC->getChannel() != channel || !m_twitchIRC->isConnected())
++            connectTwitch(channel);
++    } else disconnectTwitch();
++    if (m_youtubeEnabled)
++        connectYouTube(m_youtubeAPIKey, m_youtubeChannelId);
++    else {
++        disconnectYouTube();
++        emit youtubeStatusChanged("Disabled");
++    }
+ }
+ 
+ void ChatManager::onTwitchMessage(const ChatMessage &message)
+@@ -179,37 +177,12 @@ void ChatManager::onYouTubeDisconnected()
+ 
+ void ChatManager::onOutputDetected(const QString &url, RTMPDetector::Platform platform)
+ {
+-	blog(LOG_INFO, "[ChatManager] Output detected: %s (platform: %d)", qPrintable(url), (int)platform);
+-
+-	switch (platform) {
+-	case RTMPDetector::Platform::Twitch:
+-		if (!m_twitchEnabled) {
+-			blog(LOG_INFO, "[ChatManager] Twitch detected but platform is disabled, enabling...");
+-			enablePlatform(RTMPDetector::Platform::Twitch, true);
+-		}
+-		if (!m_twitchChannel.isEmpty()) {
+-			blog(LOG_INFO, "[ChatManager] Twitch platform detected, connecting to channel: %s",
+-			     qPrintable(m_twitchChannel));
+-			connectTwitch(m_twitchChannel);
+-		} else {
+-			blog(LOG_WARNING, "[ChatManager] Twitch detected but no channel configured in settings");
+-		}
+-		break;
+-
+-	case RTMPDetector::Platform::YouTube:
+-		if (!m_youtubeEnabled) {
+-			blog(LOG_INFO, "[ChatManager] YouTube detected but platform is disabled, enabling...");
+-			enablePlatform(RTMPDetector::Platform::YouTube, true);
+-		}
+-		if (!m_youtubeAPIKey.isEmpty() && !m_youtubeChannelId.isEmpty()) {
+-			blog(LOG_INFO, "[ChatManager] YouTube platform detected, connecting...");
+-			connectYouTube(m_youtubeAPIKey, m_youtubeChannelId);
+-		} else {
+-			blog(LOG_WARNING, "[ChatManager] YouTube detected but API key or channel ID not configured");
+-		}
+-		break;
+-
+-	default:
+-		break;
+-	}
++    Q_UNUSED(url);
++    // Detection runs repeatedly. It must not override Disabled or restart a
++    // quota/auth failure every five seconds. Manual reconnect is explicit.
++    if (platform == RTMPDetector::Platform::Twitch && m_twitchEnabled &&
++        !m_twitchIRC->isConnected() && m_twitchIRC->getChannel().isEmpty())
++        connectTwitch(m_twitchChannel);
++    if (platform == RTMPDetector::Platform::YouTube && m_youtubeEnabled && !m_youtubeAttempted)
++        connectYouTube(m_youtubeAPIKey, m_youtubeChannelId);
+ }
+diff --git a/src/chat-manager.h b/src/chat-manager.h
+index cb0c1e8..e2ba933 100644
+--- a/src/chat-manager.h
++++ b/src/chat-manager.h
+@@ -22,6 +22,8 @@ public:
+ 
+ 	void connectYouTube(const QString &apiKey, const QString &channelId);
+ 	void disconnectYouTube();
++	void reconnectYouTube();
++	void setYouTubeVideo(const QString &video) { m_youtubeVideo = video; }
+ 
+ 	void disconnectAll();
+ 
+@@ -41,6 +43,7 @@ public:
+ signals:
+ 	void twitchConnectedChanged(bool connected);
+ 	void youtubeConnectedChanged(bool connected);
++	void youtubeStatusChanged(const QString &status);
+ 
+ public slots:
+ 	void onTwitchMessage(const ChatMessage &message);
+@@ -59,10 +62,12 @@ private:
+ 
+ 	QString m_twitchChannel;
+ 
++	QString m_youtubeVideo;
+ 	QString m_youtubeAPIKey;
+ 	QString m_youtubeChannelId;
+ 	QString m_youtubeRTMPUrl;
+ 
+ 	bool m_twitchEnabled = true;
+ 	bool m_youtubeEnabled = true;
++	bool m_youtubeAttempted = false;
+ };
+diff --git a/src/chat-message.h b/src/chat-message.h
+index 41cf524..99d580b 100644
+--- a/src/chat-message.h
++++ b/src/chat-message.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include <string>
++#include <vector>
+ #include <QString>
+ #include <QColor>
+ #include <QDateTime>
+diff --git a/src/plugin-main.cpp b/src/plugin-main.cpp
+index c6deb5a..34273ff 100644
+--- a/src/plugin-main.cpp
++++ b/src/plugin-main.cpp
+@@ -66,6 +66,12 @@ void QTChatPlugin::load()
+ 	m_settingsDialog = std::make_unique<SettingsDialog>();
+ 
+ 	m_chatManager->setChatWidget(m_chatDock.get());
++    connect(m_chatManager.get(), &ChatManager::twitchConnectedChanged,
++            m_chatDock.get(), &ChatDock::setTwitchStatus);
++    connect(m_chatManager.get(), &ChatManager::youtubeStatusChanged,
++            m_chatDock.get(), &ChatDock::setYouTubeStatus);
++    connect(m_chatDock.get(), &ChatDock::reconnectYouTubeRequested,
++            m_chatManager.get(), &ChatManager::reconnectYouTube);
+ 	m_rtmpDetector->setChatManager(m_chatManager.get());
+ 
+ 	setupDocks();
+@@ -87,7 +93,8 @@ void QTChatPlugin::onObsReady()
+ 		m_chatDock->show();
+ 	}
+ 
+-	if (m_settingsDialog) {
++	if (m_settingsDialog && m_settingsDialog->getTwitchChannel().isEmpty() &&
++        m_settingsDialog->getYouTubeAPIKey().isEmpty()) {
+ 		m_settingsDialog->show();
+ 		m_settingsDialog->raise();
+ 		m_settingsDialog->activateWindow();
+@@ -116,7 +123,7 @@ void QTChatPlugin::applySettings()
+ 		m_chatManager->setTwitchChannel(twitchChannel);
+ 		m_chatManager->setYouTubeAPIKey(m_settingsDialog->getYouTubeAPIKey());
+ 		m_chatManager->setYouTubeChannelId(m_settingsDialog->getYouTubeChannelId());
+-		m_chatManager->setYouTubeRTMPUrl(m_settingsDialog->getYouTubeRTMPUrl());
++		m_chatManager->setYouTubeVideo(m_settingsDialog->getYouTubeVideo());
+ 		m_chatManager->enablePlatform(RTMPDetector::Platform::Twitch,
+ 					       m_settingsDialog->isTwitchEnabled());
+ 		m_chatManager->enablePlatform(RTMPDetector::Platform::YouTube,
+@@ -202,6 +209,9 @@ void QTChatPlugin::setupMenu()
+ 	m_settingsAction = new QAction("Settings", m_menu);
+ 	connect(m_settingsAction, &QAction::triggered, this, &QTChatPlugin::onSettingsClicked);
+ 	m_menu->addAction(m_settingsAction);
++    auto *reconnect = new QAction("Reconnect YouTube", m_menu);
++    connect(reconnect, &QAction::triggered, m_chatManager.get(), &ChatManager::reconnectYouTube);
++    m_menu->addAction(reconnect);
+ 
+ 	m_toggleDockAction = new QAction("Combined", m_menu);
+ 	connect(m_toggleDockAction, &QAction::triggered, this, &QTChatPlugin::onToggleDock);
+@@ -247,7 +257,7 @@ extern "C" {
+ bool obs_module_load(void)
+ {
+ 	blog(LOG_INFO, "=================================================");
+-	blog(LOG_INFO, "[QTChat] Initializing QTChat Plugin v1.0.0");
++	blog(LOG_INFO, "[QTChat] Initializing QTChat Plugin v1.1.0-streaming");
+ 	blog(LOG_INFO, "=================================================");
+ 
+ 	try {
+diff --git a/src/settings-dialog.cpp b/src/settings-dialog.cpp
+index 9a3fa27..1ebb8ed 100644
+--- a/src/settings-dialog.cpp
++++ b/src/settings-dialog.cpp
+@@ -4,6 +4,48 @@
+ #include <QFile>
+ #include <QTextStream>
+ #include <QDir>
++#include <QSaveFile>
++#ifdef Q_OS_WIN
++#ifndef NOMINMAX
++#define NOMINMAX
++#endif
++#include <windows.h>
++#include <wincrypt.h>
++#endif
++
++static QString protectKey(const QString &text)
++{
++#ifdef Q_OS_WIN
++    if (text.isEmpty()) return {};
++    QByteArray utf8 = text.toUtf8();
++    DATA_BLOB input{static_cast<DWORD>(utf8.size()), reinterpret_cast<BYTE *>(utf8.data())};
++    DATA_BLOB output{};
++    if (!CryptProtectData(&input, L"QTChat YouTube key", nullptr, nullptr, nullptr,
++                          CRYPTPROTECT_UI_FORBIDDEN, &output)) return {};
++    const auto stored = "dpapi:" + QByteArray(reinterpret_cast<char *>(output.pbData), int(output.cbData)).toBase64();
++    LocalFree(output.pbData);
++    return QString::fromLatin1(stored);
++#else
++    return text;
++#endif
++}
++static QString unprotectKey(const QString &text)
++{
++    if (!text.startsWith("dpapi:")) return text; // Read legacy keys; upgrade on Save.
++#ifdef Q_OS_WIN
++    auto bytes = QByteArray::fromBase64(text.mid(6).toLatin1());
++    DATA_BLOB input{static_cast<DWORD>(bytes.size()), reinterpret_cast<BYTE *>(bytes.data())};
++    DATA_BLOB output{};
++    if (!CryptUnprotectData(&input, nullptr, nullptr, nullptr, nullptr,
++                            CRYPTPROTECT_UI_FORBIDDEN, &output)) return {};
++    const auto key = QString::fromUtf8(reinterpret_cast<char *>(output.pbData), int(output.cbData));
++    LocalFree(output.pbData);
++    return key;
++#else
++    return {};
++#endif
++}
++
+ 
+ static const char *SETTINGS_FILE = "qtchat-settings.ini";
+ 
+@@ -40,15 +82,15 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
+ 	m_youtubeChannelIdEdit = new QLineEdit(this);
+ 	m_youtubeChannelIdEdit->setPlaceholderText("UC...");
+ 
+-	m_youtubeRTMPURLEdit = new QLineEdit(this);
+-	m_youtubeRTMPURLEdit->setPlaceholderText("rtmp://...");
++	m_youtubeVideoEdit = new QLineEdit(this);
++	m_youtubeVideoEdit->setPlaceholderText("https://www.youtube.com/watch?v=... (optional)");
+ 
+ 	m_youtubeEnabledCheck = new QCheckBox("Enabled", this);
+ 	m_youtubeEnabledCheck->setChecked(true);
+ 
+ 	youtubeLayout->addRow("API Key:", m_youtubeAPIKeyEdit);
+ 	youtubeLayout->addRow("Channel ID:", m_youtubeChannelIdEdit);
+-	youtubeLayout->addRow("RTMP URL:", m_youtubeRTMPURLEdit);
++	youtubeLayout->addRow("Video URL or ID:", m_youtubeVideoEdit);
+ 	youtubeLayout->addRow("", m_youtubeEnabledCheck);
+ 	m_youtubeGroup->setLayout(youtubeLayout);
+ 
+@@ -89,12 +131,10 @@ void SettingsDialog::loadSettings()
+ 		QTextStream in(&file);
+ 		while (!in.atEnd()) {
+ 			QString line = in.readLine();
+-			QStringList parts = line.split("=");
+-			if (parts.size() != 2)
+-				continue;
+-
+-			QString key = parts[0].trimmed();
+-			QString value = parts[1].trimmed();
++			const auto separator = line.indexOf('=');
++            if (separator < 1) continue;
++            const QString key = line.left(separator).trimmed();
++            const QString value = line.mid(separator + 1).trimmed();
+ 
+ 			if (key == "twitch_channel") {
+ 				m_twitchChannelEdit->setText(value);
+@@ -103,12 +143,12 @@ void SettingsDialog::loadSettings()
+ 				m_twitchEnabledCheck->setChecked(value == "true");
+ 				blog(LOG_INFO, "[SettingsDialog] Loaded twitch_enabled: %s", qPrintable(value));
+ 			} else if (key == "youtube_apikey") {
+-				m_youtubeAPIKeyEdit->setText(value);
++				m_youtubeAPIKeyEdit->setText(unprotectKey(value));
+ 			} else if (key == "youtube_channelid") {
+ 				m_youtubeChannelIdEdit->setText(value);
+ 				blog(LOG_INFO, "[SettingsDialog] Loaded youtube_channelid: '%s'", qPrintable(value));
+-			} else if (key == "youtube_rtmp_url") {
+-				m_youtubeRTMPURLEdit->setText(value);
++			} else if (key == "youtube_video") {
++				m_youtubeVideoEdit->setText(value);
+ 			} else if (key == "youtube_enabled") {
+ 				m_youtubeEnabledCheck->setChecked(value == "true");
+ 			}
+@@ -117,7 +157,7 @@ void SettingsDialog::loadSettings()
+ 	}
+ }
+ 
+-void SettingsDialog::saveSettings()
++bool SettingsDialog::saveSettings()
+ {
+ 	QString configDir = QDir::homePath() + "/.config/obs-studio";
+ 	QDir dir;
+@@ -126,23 +166,31 @@ void SettingsDialog::saveSettings()
+ 	}
+ 
+ 	QString configPath = configDir + "/" + SETTINGS_FILE;
+-	QFile file(configPath);
++	QSaveFile file(configPath);
+ 
+ 	if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+ 		QTextStream out(&file);
+ 		out << "twitch_channel=" << m_twitchChannelEdit->text() << "\n";
+ 		out << "twitch_enabled=" << (m_twitchEnabledCheck->isChecked() ? "true" : "false") << "\n";
+-		out << "youtube_apikey=" << m_youtubeAPIKeyEdit->text() << "\n";
++		const auto storedKey = protectKey(m_youtubeAPIKeyEdit->text().trimmed());
++        if (!m_youtubeAPIKeyEdit->text().trimmed().isEmpty() && storedKey.isEmpty()) {
++            QMessageBox::warning(this, "QTChat", "Could not protect the API key. Settings were not saved.");
++            return false;
++        }
++        out << "youtube_apikey=" << storedKey << "\n";
+ 		out << "youtube_channelid=" << m_youtubeChannelIdEdit->text() << "\n";
+-		out << "youtube_rtmp_url=" << m_youtubeRTMPURLEdit->text() << "\n";
++		out << "youtube_video=" << m_youtubeVideoEdit->text() << "\n";
+ 		out << "youtube_enabled=" << (m_youtubeEnabledCheck->isChecked() ? "true" : "false") << "\n";
+-		file.close();
++		out.flush();
++        if (file.commit()) return true;
+ 	}
++    QMessageBox::warning(this, "QTChat", "Could not save settings. Check file permissions.");
++    return false;
+ }
+ 
+ void SettingsDialog::onSaveClicked()
+ {
+-	saveSettings();
++	if (!saveSettings()) return;
+ 	emit settingsSaved();
+ 	accept();
+ }
+@@ -151,3 +199,9 @@ void SettingsDialog::onCancelClicked()
+ {
+ 	reject();
+ }
++
++void SettingsDialog::reject()
++{
++    loadSettings();
++    QDialog::reject();
++}
+diff --git a/src/settings-dialog.h b/src/settings-dialog.h
+index c35dd99..9403c94 100644
+--- a/src/settings-dialog.h
++++ b/src/settings-dialog.h
+@@ -16,6 +16,7 @@ class SettingsDialog : public QDialog {
+ public:
+ 	explicit SettingsDialog(QWidget *parent = nullptr);
+ 	~SettingsDialog();
++	void reject() override;
+ 
+ 	// Getter methods for settings
+ 	QString getTwitchChannel() const { return m_twitchChannelEdit->text(); }
+@@ -23,7 +24,7 @@ public:
+ 
+ 	QString getYouTubeAPIKey() const { return m_youtubeAPIKeyEdit->text(); }
+ 	QString getYouTubeChannelId() const { return m_youtubeChannelIdEdit->text(); }
+-	QString getYouTubeRTMPUrl() const { return m_youtubeRTMPURLEdit->text(); }
++	QString getYouTubeVideo() const { return m_youtubeVideoEdit->text(); }
+ 	bool isYouTubeEnabled() const { return m_youtubeEnabledCheck->isChecked(); }
+ 
+ signals:
+@@ -35,7 +36,7 @@ private slots:
+ 
+ private:
+ 	void loadSettings();
+-	void saveSettings();
++	bool saveSettings();
+ 
+ 	QGroupBox *m_twitchGroup = nullptr;
+ 	QLineEdit *m_twitchChannelEdit = nullptr;
+@@ -44,7 +45,7 @@ private:
+ 	QGroupBox *m_youtubeGroup = nullptr;
+ 	QLineEdit *m_youtubeAPIKeyEdit = nullptr;
+ 	QLineEdit *m_youtubeChannelIdEdit = nullptr;
+-	QLineEdit *m_youtubeRTMPURLEdit = nullptr;
++	QLineEdit *m_youtubeVideoEdit = nullptr;
+ 	QCheckBox *m_youtubeEnabledCheck = nullptr;
+ 
+ 	QPushButton *m_saveButton = nullptr;
+diff --git a/src/twitch-irc.cpp b/src/twitch-irc.cpp
+index 0fbc835..6ba53e4 100644
+--- a/src/twitch-irc.cpp
++++ b/src/twitch-irc.cpp
+@@ -15,7 +15,7 @@ static const QMap<QString, QColor> TwitchUsernameColors = {
+ 
+ TwitchIRC::TwitchIRC(QObject *parent) : QObject(parent)
+ {
+-	m_socket = new QTcpSocket(this);
++	m_socket = new QSslSocket(this);
+ 	m_reconnectTimer = new QTimer(this);
+ 	m_pingTimer = new QTimer(this);
+ 
+@@ -23,7 +23,7 @@ TwitchIRC::TwitchIRC(QObject *parent) : QObject(parent)
+ 	m_pingTimer->setInterval(60000);
+ 
+ 	connect(m_socket, &QTcpSocket::readyRead, this, &TwitchIRC::onReadyRead);
+-	connect(m_socket, &QTcpSocket::connected, this, &TwitchIRC::onConnected);
++	connect(m_socket, &QSslSocket::encrypted, this, &TwitchIRC::onConnected);
+ 	connect(m_socket, &QTcpSocket::disconnected, this, &TwitchIRC::onDisconnected);
+ 	connect(m_socket, &QTcpSocket::errorOccurred, this, [this](QAbstractSocket::SocketError socketError) {
+ 		onError(socketError);
+@@ -43,27 +43,20 @@ TwitchIRC::~TwitchIRC()
+ 
+ void TwitchIRC::connectToChannel(const QString &username, const QString &oauthToken, const QString &channel)
+ {
+-	m_username = username.toLower();
+-	m_oauthToken = oauthToken;
+-	m_channel = channel.toLower();
+-
+-	m_reconnectAttempts = 0;
+-
+-	blog(LOG_INFO, "[TwitchIRC] Attempting to connect to channel: '%s' (server: %s, port: %d)",
+-	     qPrintable(m_channel), qPrintable(m_server), m_port);
+-
+-	if (m_socket->isOpen() || m_socket->state() == QAbstractSocket::ConnectingState) {
+-		blog(LOG_INFO, "[TwitchIRC] Already connected or connecting, closing existing connection first");
+-		m_socket->close();
+-	}
+-
+-	m_socket->connectToHost(m_server, m_port);
++    disconnect();
++    blockSignals(false);
++    m_reconnectEnabled = true;
++    m_username = username.toLower();
++    m_oauthToken = oauthToken;
++    m_channel = channel.toLower();
++    m_readBuffer.clear();
++    m_reconnectAttempts = 0;
++    m_socket->connectToHostEncrypted(m_server, m_port);
+ }
+ 
+ void TwitchIRC::disconnect()
+ {
+-	// Block signals to prevent emitting signals during shutdown
+-	blockSignals(true);
++	// Close deliberately without scheduling another reconnect.
+ 
+ 	m_reconnectEnabled = false;
+ 	m_reconnectTimer->stop();
+@@ -77,6 +70,7 @@ void TwitchIRC::disconnect()
+ 	}
+ 
+ 	m_connected = false;
++	emit disconnected();
+ 	// Don't emit signals during shutdown - we're being destroyed
+ }
+ 
+@@ -120,7 +114,9 @@ QString TwitchIRC::parseChannelName(const QString &input)
+ 
+ void TwitchIRC::onConnected()
+ {
+-	blog(LOG_INFO, "[TwitchIRC] Connected to Twitch IRC");
++	m_reconnectTimer->stop();
++	blog(LOG_INFO, "[TwitchIRC] Connected to Twitch IRC over TLS");
++	m_socket->write("CAP REQ :twitch.tv/tags twitch.tv/commands\r\n");
+ 
+ 	// Support anonymous connection (no OAuth required for read-only chat)
+ 	if (!m_oauthToken.isEmpty()) {
+@@ -155,12 +151,20 @@ void TwitchIRC::onError(QAbstractSocket::SocketError socketError)
+ 	QString errorMsg = m_socket->errorString();
+ 	blog(LOG_ERROR, "[TwitchIRC] Socket error (%d): %s", socketError, qPrintable(errorMsg));
+ 	emit errorOccurred(errorMsg);
++	if (m_reconnectEnabled && m_reconnectAttempts < m_maxReconnectAttempts && !m_reconnectTimer->isActive())
++		m_reconnectTimer->start();
+ }
+ 
+ void TwitchIRC::onReadyRead()
+ {
+-	QByteArray data = m_socket->readAll();
+-	QStringList lines = QString::fromUtf8(data).split("\r\n", Qt::SkipEmptyParts);
++	m_readBuffer += m_socket->readAll();
++    if (m_readBuffer.size() > 65536) { m_readBuffer.clear(); m_socket->abort(); return; }
++    QStringList lines;
++    int end = -1;
++    while ((end = m_readBuffer.indexOf("\r\n")) >= 0) {
++        lines.append(QString::fromUtf8(m_readBuffer.left(end)));
++        m_readBuffer.remove(0, end + 2);
++    }
+ 
+ 	for (const QString &line : lines) {
+ 		if (line.isEmpty())
+@@ -176,7 +180,14 @@ void TwitchIRC::onReadyRead()
+ 			parseMessage(line);
+ 		}
+ 
+-		if (line.contains("376") || line.contains("366")) {
++		QString commandLine = line;
++		if (commandLine.startsWith('@')) commandLine = commandLine.section(' ', 1);
++		const auto command = commandLine.section(' ', 1, 1);
++		if (command == "RECONNECT") {
++			m_socket->abort();
++			continue;
++		}
++		if (command == "366") {
+ 			m_connected = true;
+ 			m_pingTimer->start();
+ 			m_reconnectAttempts = 0;
+@@ -190,6 +201,7 @@ void TwitchIRC::onReconnectTimer()
+ {
+ 	m_reconnectTimer->stop();
+ 	m_reconnectAttempts++;
++	m_readBuffer.clear();
+ 
+ 	blog(LOG_INFO, "[TwitchIRC] Reconnecting... Attempt %d/%d", m_reconnectAttempts, m_maxReconnectAttempts);
+ 
+@@ -197,7 +209,7 @@ void TwitchIRC::onReconnectTimer()
+ 		m_socket->close();
+ 	}
+ 
+-	m_socket->connectToHost(m_server, m_port);
++	m_socket->connectToHostEncrypted(m_server, m_port);
+ }
+ 
+ void TwitchIRC::sendPass(const QString &token)
+@@ -234,75 +246,36 @@ void TwitchIRC::parseMessage(const QString &rawMessage)
+ 
+ ChatMessage TwitchIRC::parsePrivmsg(const QString &message)
+ {
+-	ChatMessage msg;
+-	msg.platform = "twitch";
+-	msg.timestamp = QDateTime::currentDateTime();
+-
+-	int firstColonPos = message.indexOf(":");
+-	if (firstColonPos == -1)
+-		return msg;
+-
+-	int prefixEndPos = message.indexOf(" ", firstColonPos);
+-	if (prefixEndPos == -1)
+-		return msg;
+-
+-	QString prefix = message.mid(firstColonPos + 1, prefixEndPos - firstColonPos - 1);
+-
+-	int exclamationPos = prefix.indexOf("!");
+-	if (exclamationPos != -1) {
+-		msg.username = prefix.left(exclamationPos);
+-	}
+-
+-	int messageStart = message.indexOf("PRIVMSG #", firstColonPos);
+-	if (messageStart == -1)
+-		return msg;
+-
+-	messageStart = message.indexOf(":", messageStart);
+-	if (messageStart == -1)
+-		return msg;
+-
+-	msg.message = message.mid(messageStart + 1);
+-
+-	int atPos = message.indexOf("@");
+-	if (atPos != -1) {
+-		QString tags = message.mid(atPos + 1, firstColonPos - atPos - 1);
+-
+-		int colorStart = tags.indexOf("color=");
+-		if (colorStart != -1) {
+-			int colorEnd = tags.indexOf(";", colorStart);
+-			QString colorName;
+-			if (colorEnd != -1) {
+-				colorName = tags.mid(colorStart + 6, colorEnd - colorStart - 6);
+-			} else {
+-				colorName = tags.mid(colorStart + 6);
+-			}
+-			if (!colorName.isEmpty() && TwitchUsernameColors.contains(colorName)) {
+-				msg.usernameColor = TwitchUsernameColors.value(colorName);
+-			}
+-		}
+-
+-		if (tags.contains("subscriber=1")) {
+-			msg.isSubscriber = true;
+-		}
+-		if (tags.contains("user-type=mod")) {
+-			msg.isModerator = true;
+-		}
+-		if (tags.contains("user-type=global_mod")) {
+-			msg.isModerator = true;
+-		}
+-		if (tags.contains("user-type=admin")) {
+-			msg.isModerator = true;
+-		}
+-		if (tags.contains("user-type=broadcaster")) {
+-			msg.isBroadcaster = true;
+-		}
+-	}
+-
+-	if (msg.usernameColor == QColor()) {
+-		uint hash = static_cast<uint>(qHash(msg.username));
+-		int colorIndex = hash % TwitchUsernameColors.size();
+-		msg.usernameColor = TwitchUsernameColors.values().at(colorIndex);
+-	}
+-
+-	return msg;
++    ChatMessage msg;
++    msg.platform = "twitch";
++    msg.timestamp = QDateTime::currentDateTime();
++    QString rest = message;
++    QMap<QString, QString> tags;
++    if (rest.startsWith('@')) {
++        const auto end = rest.indexOf(' ');
++        if (end < 0) return msg;
++        for (const auto &tag : rest.mid(1, end - 1).split(';')) {
++            const auto equals = tag.indexOf('=');
++            if (equals > 0) tags.insert(tag.left(equals), tag.mid(equals + 1));
++        }
++        rest = rest.mid(end + 1);
++    }
++    if (!rest.startsWith(':')) return msg;
++    const auto prefixEnd = rest.indexOf(' ');
++    if (prefixEnd < 0) return msg;
++    msg.username = rest.mid(1, prefixEnd - 1).section('!', 0, 0);
++    rest = rest.mid(prefixEnd + 1);
++    if (!rest.startsWith("PRIVMSG #")) return msg;
++    const auto textStart = rest.indexOf(" :");
++    if (textStart < 0) return msg;
++    msg.message = rest.mid(textStart + 2);
++    msg.id = tags.value("id");
++    const QColor color(tags.value("color"));
++    if (color.isValid()) msg.usernameColor = color;
++    else msg.usernameColor = TwitchUsernameColors.values().at(qHash(msg.username) % TwitchUsernameColors.size());
++    msg.isSubscriber = tags.value("subscriber") == "1";
++    msg.isModerator = tags.value("mod") == "1";
++    msg.isBroadcaster = tags.value("badges").contains("broadcaster/");
++    msg.isVip = tags.value("badges").contains("vip/");
++    return msg;
+ }
+diff --git a/src/twitch-irc.h b/src/twitch-irc.h
+index d6a648d..1a0d411 100644
+--- a/src/twitch-irc.h
++++ b/src/twitch-irc.h
+@@ -3,7 +3,7 @@
+ #include <QObject>
+ #include <QString>
+ #include <QTimer>
+-#include <QTcpSocket>
++#include <QSslSocket>
+ #include "chat-message.h"
+ 
+ class TwitchIRC : public QObject {
+@@ -35,6 +35,7 @@ private slots:
+ 	void onReconnectTimer();
+ 
+ private:
++	friend class YouTubeTests;
+ 	void sendPass(const QString &token);
+ 	void sendNick(const QString &username);
+ 	void sendJoin(const QString &channel);
+@@ -42,12 +43,13 @@ private:
+ 	void parseMessage(const QString &rawMessage);
+ 	ChatMessage parsePrivmsg(const QString &message);
+ 
+-	QTcpSocket *m_socket = nullptr;
++	QSslSocket *m_socket = nullptr;
+ 	QString m_username;
+ 	QString m_oauthToken;
+ 	QString m_channel;
+ 	QString m_server = "irc.chat.twitch.tv";
+-	quint16 m_port = 6667;
++	quint16 m_port = 6697;
++	QByteArray m_readBuffer;
+ 
+ 	bool m_connected = false;
+ 	bool m_reconnectEnabled = true;
+diff --git a/src/util/log.h b/src/util/log.h
+index fa10f83..6073097 100644
+--- a/src/util/log.h
++++ b/src/util/log.h
+@@ -1,16 +1,3 @@
+ #pragma once
+-
+-// Log level constants - used with OBS's blog() function
+-// OBS's blog() accepts log levels: 0-10 (0=most verbose, 10=errors only)
+-#define LOG_DEBUG 4
+-#define LOG_INFO  3
+-#define LOG_WARN  2
+-#define LOG_ERROR 1
+-#define LOG_TRACE 5
+-
+-// Convenience macros for OBS's blog() function (provided by obs-module.h)
+-#define blog_debug(...) blog(LOG_DEBUG, __VA_ARGS__)
+-#define blog_info(...)  blog(LOG_INFO, __VA_ARGS__)
+-#define blog_warn(...)  blog(LOG_WARN, __VA_ARGS__)
+-#define blog_error(...) blog(LOG_ERROR, __VA_ARGS__)
+-// Note: blog() is OBS's built-in function from <obs-module.h>
++// Use OBS's real log levels. These must not be replaced by local numeric macros.
++#include <util/base.h>
+diff --git a/src/youtube-chat.cpp b/src/youtube-chat.cpp
+index ffcd897..d6c17ba 100644
+--- a/src/youtube-chat.cpp
++++ b/src/youtube-chat.cpp
+@@ -1,242 +1,304 @@
+ #include "youtube-chat.h"
+-#include <QJsonDocument>
+-#include <QJsonObject>
+ #include <QJsonArray>
+-#include <QUrl>
++#include <QJsonDocument>
++#include <QRegularExpression>
++#include <QSslSocket>
+ #include <QUrlQuery>
+-#include <QTimeZone>
+ #include <obs-module.h>
++#include <algorithm>
+ 
+ YouTubeChat::YouTubeChat(QObject *parent) : QObject(parent)
+ {
+-	m_networkManager = new QNetworkAccessManager(this);
+-	m_pollTimer = new QTimer(this);
+-	m_pollTimer->setInterval(m_pollIntervalMs);
+-
+-	connect(m_pollTimer, &QTimer::timeout, this, &YouTubeChat::onPollTimer);
++    m_retryTimer.setSingleShot(true);
++    m_headersTimer.setSingleShot(true);
++    connect(&m_retryTimer, &QTimer::timeout, this, [this] {
++        if (!m_active || m_reply) return;
++        if (m_liveChatId.isEmpty()) discover(); else startStream();
++    });
++    // Only bound connection establishment, not quiet periods in chat.
++    connect(&m_headersTimer, &QTimer::timeout, this, [this] {
++        if (!m_active) return;
++        ++m_generation;
++        cancelReply();
++        retry("Connection timed out");
++    });
+ }
++YouTubeChat::~YouTubeChat() { disconnect(); }
+ 
+-YouTubeChat::~YouTubeChat()
++QString YouTubeChat::videoId(const QString &input)
+ {
+-	disconnect();
++    const auto text = input.trimmed();
++    static const QRegularExpression id("^[A-Za-z0-9_-]{11}$");
++    if (id.match(text).hasMatch()) return text;
++    const QUrl url(text);
++    const auto host = url.host().toLower();
++    QString candidate;
++    if (host == "youtu.be") candidate = url.path().section('/', 1, 1);
++    else if (host == "youtube.com" || host.endsWith(".youtube.com")) {
++        candidate = QUrlQuery(url).queryItemValue("v");
++        if (candidate.isEmpty() && (url.path().startsWith("/live/") || url.path().startsWith("/shorts/") || url.path().startsWith("/embed/")))
++            candidate = url.path().section('/', 2, 2);
++    }
++    return id.match(candidate).hasMatch() ? candidate : QString();
+ }
+-
+-void YouTubeChat::connectToChannel(const QString &apiKey, const QString &channelId)
++QString YouTubeChat::safeError(QString text, const QString &apiKey)
+ {
+-	m_apiKey = apiKey;
+-	m_channelId = channelId;
+-
+-	fetchLiveChatId();
++    if (!apiKey.isEmpty()) text.replace(apiKey, "[redacted]");
++    text.replace(QRegularExpression("AIza[0-9A-Za-z_-]+"), "[redacted]");
++    text.replace(QRegularExpression("(?i)(key|access_token|refresh_token)=([^\\s&]+)"), "\\1=[redacted]");
++    text.replace(QRegularExpression("https?://[^\\s]+"), "[URL omitted]");
++    return text.left(320);
++}
++void YouTubeChat::status(const QString &text)
++{
++    const auto safe = safeError(text, m_apiKey);
++    blog(LOG_INFO, "[YouTubeChat] %s", qPrintable(safe));
++    emit statusChanged(safe);
++}
++void YouTubeChat::cancelReply()
++{
++    m_headersTimer.stop();
++    if (!m_reply) return;
++    auto *reply = m_reply.data();
++    m_reply.clear();
++    QObject::disconnect(reply, nullptr, this, nullptr);
++    reply->abort();
++    reply->deleteLater();
+ }
+-
+ void YouTubeChat::disconnect()
+ {
+-	// Block signals to prevent emitting signals during shutdown
+-	blockSignals(true);
+-
+-	m_pollTimer->stop();
+-	m_connected = false;
+-	m_hasLiveChat = false;
+-
+-	// Don't emit signals during shutdown - we're being destroyed
++    ++m_generation;
++    m_active = false;
++    m_retryTimer.stop();
++    cancelReply();
++    m_decoder.clear();
++    const bool wasConnected = m_connected;
++    m_connected = false;
++    if (wasConnected) emit disconnected();
++    status("Disconnected");
+ }
+-
+-void YouTubeChat::fetchLiveChatId()
+-{
+-	QUrl url("https://www.googleapis.com/youtube/v3/search");
+-	QUrlQuery query;
+-	query.addQueryItem("part", "snippet");
+-	query.addQueryItem("channelId", m_channelId);
+-	query.addQueryItem("eventType", "live");
+-	query.addQueryItem("type", "video");
+-	query.addQueryItem("key", m_apiKey);
+-	url.setQuery(query);
+-
+-	QNetworkRequest request(url);
+-	QNetworkReply *reply = m_networkManager->get(request);
+-
+-	connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+-		if (reply->error() != QNetworkReply::NoError) {
+-			QString error = reply->errorString();
+-			blog(LOG_ERROR, "[YouTubeChat] Error fetching live chat: %s", qPrintable(error));
+-			emit errorOccurred(error);
+-			reply->deleteLater();
+-			return;
+-		}
+-
+-		QByteArray data = reply->readAll();
+-		QJsonDocument doc = QJsonDocument::fromJson(data);
+-		QJsonObject root = doc.object();
+-
+-		if (root.contains("items") && root["items"].isArray()) {
+-			QJsonArray items = root["items"].toArray();
+-			if (!items.isEmpty()) {
+-				QJsonObject firstItem = items[0].toObject();
+-				QString videoId = firstItem["id"].toObject()["videoId"].toString();
+-
+-				QUrl videosUrl("https://www.googleapis.com/youtube/v3/videos");
+-				QUrlQuery videosQuery;
+-				videosQuery.addQueryItem("part", "liveStreamingDetails,snippet");
+-				videosQuery.addQueryItem("id", videoId);
+-				videosQuery.addQueryItem("key", m_apiKey);
+-				videosUrl.setQuery(videosQuery);
+-
+-				QNetworkRequest videosRequest(videosUrl);
+-				QNetworkReply *videosReply = m_networkManager->get(videosRequest);
+-
+-				connect(videosReply, &QNetworkReply::finished, this, [this, videosReply]() {
+-					if (videosReply->error() != QNetworkReply::NoError) {
+-						QString error = videosReply->errorString();
+-						blog(LOG_ERROR, "[YouTubeChat] Error fetching video details: %s",
+-						     qPrintable(error));
+-						emit errorOccurred(error);
+-						videosReply->deleteLater();
+-						return;
+-					}
+-
+-					QByteArray data = videosReply->readAll();
+-					QJsonDocument doc = QJsonDocument::fromJson(data);
+-					QJsonObject root = doc.object();
+-
+-					if (root.contains("items") && root["items"].isArray()) {
+-						QJsonArray items = root["items"].toArray();
+-						if (!items.isEmpty()) {
+-							QJsonObject item = items[0].toObject();
+-							if (item.contains("liveStreamingDetails")) {
+-								QJsonObject liveDetails =
+-									item["liveStreamingDetails"].toObject();
+-								if (liveDetails.contains("activeLiveChatId")) {
+-									m_liveChatId = liveDetails["activeLiveChatId"]
+-											       .toString();
+-									m_hasLiveChat = true;
+-									m_connected = true;
+-									blog(LOG_INFO,
+-									     "[YouTubeChat] Found live chat ID: %s",
+-									     qPrintable(m_liveChatId));
+-									emit connected();
+-									m_pollTimer->start();
+-									return;
+-								}
+-							}
+-						}
+-					}
+-
+-					blog(LOG_WARNING, "[YouTubeChat] No active live stream found");
+-					emit errorOccurred("No active live stream found");
+-					videosReply->deleteLater();
+-				});
+-			} else {
+-				blog(LOG_WARNING, "[YouTubeChat] No live streams found");
+-				emit errorOccurred("No live streams found");
+-			}
+-		}
+-
+-		reply->deleteLater();
+-	});
++void YouTubeChat::connectToChannel(const QString &key, const QString &channel, const QString &video)
++{
++    const auto k = key.trimmed(), c = channel.trimmed(), v = video.trimmed();
++    // Saving unchanged settings must not open a duplicate stream or spend quota.
++    if (m_active && k == m_apiKey && c == m_channelId && v == m_video) return;
++    disconnect();
++    m_apiKey = k; m_channelId = c; m_video = v;
++    m_liveChatId.clear(); m_pageToken.clear(); m_seen.clear(); m_seenOrder.clear();
++    m_failures = 0; m_streamCalls = 0; m_receivedBatch = false;
++    if (k.isEmpty()) { status("Enter a YouTube API key in Settings"); return; }
++    if (!v.isEmpty() && videoId(v).isEmpty()) { status("Invalid YouTube video URL or ID"); return; }
++    if (v.isEmpty() && !QRegularExpression("^UC[A-Za-z0-9_-]{22}$").match(c).hasMatch()) {
++        status("Enter a video URL or a channel ID beginning UC"); return;
++    }
++    if (!QSslSocket::supportsSsl()) { status("TLS unavailable: install the matching Qt TLS backend"); return; }
++    m_active = true;
++    discover();
+ }
+-
+-void YouTubeChat::pollMessages()
++QNetworkReply *YouTubeChat::get(const QUrl &url)
+ {
+-	if (m_liveChatId.isEmpty()) {
+-		return;
+-	}
+-
+-	QUrl url("https://www.googleapis.com/youtube/v3/liveChat/messages");
+-	QUrlQuery query;
+-	query.addQueryItem("part", "snippet,authorDetails");
+-	query.addQueryItem("liveChatId", m_liveChatId);
+-	query.addQueryItem("maxResults", "200");
+-	if (!m_nextPageToken.isEmpty()) {
+-		query.addQueryItem("pageToken", m_nextPageToken);
+-	}
+-	query.addQueryItem("key", m_apiKey);
+-	url.setQuery(query);
+-
+-	QNetworkRequest request(url);
+-	QNetworkReply *reply = m_networkManager->get(request);
+-
+-	connect(reply, &QNetworkReply::finished, this, [this, reply]() { onNetworkReply(); });
++    QNetworkRequest request(url);
++    request.setRawHeader("x-goog-api-key", m_apiKey.toUtf8());
++    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
++    request.setTransferTimeout(30000);
++    auto *reply = m_network.get(request);
++    m_reply = reply;
++    return reply;
+ }
+-
+-void YouTubeChat::onPollTimer()
++QString YouTubeChat::apiFailure(QNetworkReply *reply, const QByteArray &body) const
+ {
+-	pollMessages();
++    const auto error = QJsonDocument::fromJson(body).object().value("error").toObject();
++    const auto errors = error.value("errors").toArray();
++    const auto reason = errors.isEmpty() ? QString() : errors.first().toObject().value("reason").toString();
++    if (reason == "quotaExceeded" || reason == "dailyLimitExceeded")
++        return "YouTube quota exhausted; retries stopped. Reconnect after quota resets.";
++    if (!reason.isEmpty()) return "YouTube rejected the request: " + reason;
++    const int code = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
++    if (code == 401 || code == 403) return "YouTube denied access; check the API key, API restrictions and quota.";
++    return QString("YouTube request failed (HTTP %1)").arg(code);
+ }
+-
+-void YouTubeChat::onNetworkReply()
++void YouTubeChat::readJson(QNetworkReply *reply, quint64 generation,
++                          const std::function<void(const QJsonObject &)> &handler)
+ {
+-	QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
+-	if (!reply)
+-		return;
+-
+-	if (reply->error() != QNetworkReply::NoError) {
+-		QString error = reply->errorString();
+-		blog(LOG_ERROR, "[YouTubeChat] Polling error: %s", qPrintable(error));
+-		emit errorOccurred(error);
+-		reply->deleteLater();
+-		return;
+-	}
+-
+-	QByteArray data = reply->readAll();
+-	QJsonDocument doc = QJsonDocument::fromJson(data);
+-	QJsonObject root = doc.object();
+-
+-	if (root.contains("nextPageToken")) {
+-		m_nextPageToken = root["nextPageToken"].toString();
+-	}
+-
+-	if (root.contains("pollingIntervalMillis")) {
+-		int pollingInterval = root["pollingIntervalMillis"].toInt();
+-		if (pollingInterval > 0 && pollingInterval != m_pollIntervalMs) {
+-			m_pollIntervalMs = pollingInterval;
+-			m_pollTimer->setInterval(pollingInterval);
+-		}
+-	}
+-
+-	if (root.contains("items") && root["items"].isArray()) {
+-		QJsonArray items = root["items"].toArray();
+-		parseMessages(items);
+-	}
+-
+-	reply->deleteLater();
++    connect(reply, &QNetworkReply::finished, this, [this, reply, generation, handler] {
++        if (generation != m_generation || !m_active) { reply->deleteLater(); return; }
++        m_reply.clear();
++        const auto data = reply->readAll();
++        const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
++        if (reply->error() != QNetworkReply::NoError || http != 200) {
++            const auto message = apiFailure(reply, data);
++            if (http == 429 || http >= 500 || http == 0) retry(message);
++            else stopWithError(message);
++        } else {
++            QJsonParseError error;
++            const auto doc = QJsonDocument::fromJson(data, &error);
++            if (error.error != QJsonParseError::NoError || !doc.isObject())
++                stopWithError("Invalid response from YouTube");
++            else handler(doc.object());
++        }
++        reply->deleteLater();
++    });
+ }
+-
+-void YouTubeChat::parseMessages(const QJsonArray &messages)
++void YouTubeChat::discover()
+ {
+-	for (const QJsonValue &value : messages) {
+-		QJsonObject item = value.toObject();
+-		QString kind = item["kind"].toString();
+-
+-		if (kind != "youtube#liveChatMessage") {
+-			continue;
+-		}
+-
+-		QJsonObject snippet = item["snippet"].toObject();
+-		QJsonObject authorDetails = item["authorDetails"].toObject();
+-
+-		ChatMessage msg;
+-		msg.platform = "youtube";
+-		msg.id = item["id"].toString();
+-		msg.username = authorDetails["displayName"].toString();
+-		msg.message = snippet["displayMessage"].toString();
+-
+-		QString publishedAt = snippet["publishedAt"].toString();
+-		QDateTime timestamp = QDateTime::fromString(publishedAt, "yyyy-MM-ddThh:mm:ss.zzzZ");
+-		timestamp.setTimeZone(QTimeZone::UTC);
+-		msg.timestamp = timestamp.toLocalTime();
+-
+-		if (authorDetails.contains("chatOwner")) {
+-			msg.isBroadcaster = authorDetails["chatOwner"].toBool();
+-		}
+-		if (authorDetails.contains("isChatModerator")) {
+-			msg.isModerator = authorDetails["isChatModerator"].toBool();
+-		}
+-		if (authorDetails.contains("isChatSponsor")) {
+-			msg.isSubscriber = authorDetails["isChatSponsor"].toBool();
+-		}
+-
+-		msg.usernameColor = QColor(255, 0, 0);
+-
+-		emit messageReceived(msg);
+-	}
++    if (!m_active || m_reply) return;
++    if (!m_video.isEmpty()) { lookupVideo(videoId(m_video)); return; }
++    status("Looking for a public live broadcast");
++    QUrl url("https://www.googleapis.com/youtube/v3/search");
++    QUrlQuery query;
++    query.addQueryItem("part", "id"); query.addQueryItem("type", "video");
++    query.addQueryItem("eventType", "live"); query.addQueryItem("channelId", m_channelId);
++    query.addQueryItem("maxResults", "1"); url.setQuery(query);
++    readJson(get(url), m_generation, [this](const QJsonObject &root) {
++        const auto items = root.value("items").toArray();
++        if (items.isEmpty()) {
++            stopWithError("No public live broadcast found. Go live, then click Reconnect YouTube.");
++            return;
++        }
++        const auto id = items.first().toObject().value("id").toObject().value("videoId").toString();
++        if (id.isEmpty()) { stopWithError("YouTube returned no video ID"); return; }
++        lookupVideo(id);
++    });
++}
++void YouTubeChat::lookupVideo(const QString &id)
++{
++    status("Finding the broadcast's live chat");
++    QUrl url("https://www.googleapis.com/youtube/v3/videos");
++    QUrlQuery query;
++    query.addQueryItem("part", "liveStreamingDetails"); query.addQueryItem("id", id); url.setQuery(query);
++    readJson(get(url), m_generation, [this](const QJsonObject &root) {
++        const auto items = root.value("items").toArray();
++        if (items.isEmpty()) { stopWithError("Video unavailable. Check the video URL and visibility."); return; }
++        m_liveChatId = items.first().toObject().value("liveStreamingDetails").toObject().value("activeLiveChatId").toString();
++        if (m_liveChatId.isEmpty()) {
++            stopWithError("No active chat for this broadcast. Enable chat and go live, then reconnect.");
++            return;
++        }
++        startStream();
++    });
++}
++void YouTubeChat::startStream()
++{
++    if (!m_active || m_reply) return;
++    if (++m_streamCalls > 100) { stopWithError("Session connection limit reached; reconnect manually after checking the network."); return; }
++    m_decoder.clear();
++    m_receivedBatch = false;
++    status(QString("Connecting via streamList (connection %1)").arg(m_streamCalls));
++    // Google's documented gRPC service. Qt provides HTTP/2 and certificate validation.
++    QNetworkRequest request(QUrl("https://youtube.googleapis.com/youtube.api.v3.V3DataLiveChatMessageService/StreamList"));
++    request.setAttribute(QNetworkRequest::Http2AllowedAttribute, true);
++    request.setAttribute(QNetworkRequest::Http2DirectAttribute, true);
++    request.setAttribute(QNetworkRequest::CacheSaveControlAttribute, false);
++    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
++    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/grpc");
++    request.setRawHeader("te", "trailers");
++    request.setRawHeader("grpc-accept-encoding", "identity");
++    request.setRawHeader("x-goog-api-key", m_apiKey.toUtf8());
++    request.setTransferTimeout(0); // An idle chat must not create a reconnect loop.
++    auto *reply = m_network.post(request, YouTubeWire::request(m_liveChatId, m_pageToken));
++    m_reply = reply;
++    const auto generation = m_generation;
++    m_headersTimer.start(30000);
++    connect(reply, &QNetworkReply::metaDataChanged, this, [this, reply, generation] {
++        if (generation != m_generation || !m_active) return;
++        if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).isValid()) m_headersTimer.stop();
++    });
++    connect(reply, &QNetworkReply::readyRead, this, [this, reply, generation] { consume(reply, generation); });
++    connect(reply, &QNetworkReply::finished, this, [this, reply, generation] { finishStream(reply, generation); });
++}
++void YouTubeChat::consume(QNetworkReply *reply, quint64 generation)
++{
++    if (generation != m_generation || !m_active) return;
++    const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
++    // Preserve JSON HTTP error bodies for finished(), rather than decoding as protobuf.
++    if (http != 200) return;
++    if (!reply->header(QNetworkRequest::ContentTypeHeader).toString().startsWith("application/grpc")) {
++        stopWithError("YouTube returned an unsupported stream format"); return;
++    }
++    while (reply->bytesAvailable() > 0 && m_active) {
++        QVector<YouTubeWire::Batch> batches;
++        if (!m_decoder.feed(reply->read(65536), batches)) {
++            stopWithError("Invalid or oversized stream frame; reconnect stopped"); return;
++        }
++        for (const auto &batch : batches) {
++            handleBatch(batch);
++            if (!m_active) return;
++        }
++    }
++}
++void YouTubeChat::handleBatch(const YouTubeWire::Batch &batch)
++{
++    m_receivedBatch = true;
++    if (!m_connected) {
++        m_connected = true;
++        emit connected();
++        status("Connected via streamList");
++    }
++    // Keep the last usable resume token even when a heartbeat omits it.
++    if (!batch.nextPageToken.isEmpty()) m_pageToken = batch.nextPageToken;
++    for (const auto &m : batch.messages) {
++        if (m.ended) { stopWithError("YouTube broadcast ended"); return; }
++        if (m.text.isEmpty()) continue;
++        if (!m.id.isEmpty()) {
++            if (m_seen.contains(m.id)) continue;
++            m_seen.insert(m.id); m_seenOrder.enqueue(m.id);
++            while (m_seenOrder.size() > 5000) m_seen.remove(m_seenOrder.dequeue());
++        }
++        ChatMessage msg;
++        msg.platform = "youtube"; msg.id = m.id; msg.username = m.author; msg.message = m.text;
++        msg.timestamp = QDateTime::fromString(m.published, Qt::ISODateWithMs);
++        if (!msg.timestamp.isValid()) msg.timestamp = QDateTime::currentDateTime();
++        msg.timestamp = msg.timestamp.toLocalTime();
++        msg.isBroadcaster = m.owner; msg.isModerator = m.moderator; msg.isSubscriber = m.subscriber;
++        msg.usernameColor = QColor(235, 90, 90);
++        emit messageReceived(msg);
++    }
++    if (batch.offline) stopWithError("YouTube broadcast ended");
++}
++void YouTubeChat::finishStream(QNetworkReply *reply, quint64 generation)
++{
++    if (generation != m_generation || !m_active) { reply->deleteLater(); return; }
++    consume(reply, generation);
++    if (generation != m_generation || !m_active) return;
++    m_headersTimer.stop();
++    m_reply.clear();
++    const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
++    bool ok = false;
++    const int grpc = reply->rawHeader("grpc-status").toInt(&ok);
++    const auto body = reply->readAll();
++    if (http == 401 || http == 403 || (ok && (grpc == 3 || grpc == 7 || grpc == 8 || grpc == 9 || grpc == 16))) {
++        QString message = http != 200 ? apiFailure(reply, body) :
++            QString("YouTube rejected streamList (gRPC %1). Check quota, API key and broadcast status; automatic retries stopped.").arg(grpc);
++        stopWithError(message);
++    } else if (http == 404 || (ok && grpc == 5)) {
++        stopWithError("Live chat unavailable or ended. Check the broadcast and reconnect.");
++    } else if (http >= 400 && http != 429 && http < 500) {
++        stopWithError(apiFailure(reply, body));
++    } else {
++        const QString reason = !m_decoder.empty() ? "Incomplete stream frame" :
++            (m_receivedBatch ? "Stream connection closed" : "Stream closed before receiving chat");
++        // Never fall back silently to the expensive polling endpoint.
++        retry(reason);
++    }
++    reply->deleteLater();
++}
++void YouTubeChat::retry(const QString &reason)
++{
++    if (!m_active) return;
++    if (m_connected) { m_connected = false; emit disconnected(); }
++    if (++m_failures > 8) { stopWithError(reason + "; retry limit reached. Use Reconnect YouTube."); return; }
++    const int seconds = std::min(300, 15 * (1 << std::min(m_failures - 1, 5)));
++    status(QString("%1; reconnecting in %2 s (%3/8)").arg(reason).arg(seconds).arg(m_failures));
++    m_retryTimer.start(seconds * 1000);
++}
++void YouTubeChat::stopWithError(const QString &message)
++{
++    ++m_generation;
++    m_active = false;
++    m_retryTimer.stop();
++    cancelReply();
++    if (m_connected) { m_connected = false; emit disconnected(); }
++    const auto safe = safeError(message, m_apiKey);
++    status(safe);
++    emit errorOccurred(safe);
+ }
+diff --git a/src/youtube-chat.h b/src/youtube-chat.h
+index ad13b3a..1c64e4e 100644
+--- a/src/youtube-chat.h
++++ b/src/youtube-chat.h
+@@ -1,49 +1,58 @@
+ #pragma once
+-
+ #include <QObject>
+-#include <QString>
+ #include <QTimer>
++#include <QPointer>
+ #include <QNetworkAccessManager>
+ #include <QNetworkReply>
++#include <QQueue>
++#include <QSet>
++#include <QJsonObject>
++#include <functional>
+ #include "chat-message.h"
++#include "youtube-wire.h"
+ 
+ class YouTubeChat : public QObject {
+-	Q_OBJECT
+-
++    Q_OBJECT
++    friend class YouTubeTests;
+ public:
+-	explicit YouTubeChat(QObject *parent = nullptr);
+-	~YouTubeChat();
+-
+-	void connectToChannel(const QString &apiKey, const QString &channelId);
+-	void disconnect();
+-
+-	bool isConnected() const { return m_connected; }
+-	QString getChannelId() const { return m_channelId; }
+-
++    explicit YouTubeChat(QObject *parent = nullptr);
++    ~YouTubeChat();
++    void connectToChannel(const QString &apiKey, const QString &channelId, const QString &video = {});
++    void disconnect();
++    bool isConnected() const { return m_connected; }
++    QString getChannelId() const { return m_channelId; }
++    static QString videoId(const QString &input);
++    static QString safeError(QString text, const QString &apiKey);
+ signals:
+-	void messageReceived(const ChatMessage &message);
+-	void connected();
+-	void disconnected();
+-	void errorOccurred(const QString &errorMessage);
+-
+-private slots:
+-	void onPollTimer();
+-	void onNetworkReply();
+-	void fetchLiveChatId();
+-	void pollMessages();
+-
++    void messageReceived(const ChatMessage &message);
++    void connected();
++    void disconnected();
++    void errorOccurred(const QString &message);
++    void statusChanged(const QString &status);
+ private:
+-	void parseMessages(const QJsonArray &messages);
+-
+-	QNetworkAccessManager *m_networkManager = nullptr;
+-	QString m_apiKey;
+-	QString m_channelId;
+-	QString m_liveChatId;
+-	QString m_nextPageToken;
+-
+-	bool m_connected = false;
+-	bool m_hasLiveChat = false;
+-
+-	QTimer *m_pollTimer = nullptr;
+-	int m_pollIntervalMs = 2000;
++    void discover();
++    void lookupVideo(const QString &id);
++    void startStream();
++    void consume(QNetworkReply *reply, quint64 generation);
++    void finishStream(QNetworkReply *reply, quint64 generation);
++    void handleBatch(const YouTubeWire::Batch &batch);
++    void retry(const QString &reason);
++    void stopWithError(const QString &message);
++    void status(const QString &text);
++    void cancelReply();
++    void readJson(QNetworkReply *reply, quint64 generation, const std::function<void(const QJsonObject &)> &handler);
++    QNetworkReply *get(const QUrl &url);
++    QString apiFailure(QNetworkReply *reply, const QByteArray &body) const;
++    QNetworkAccessManager m_network;
++    QPointer<QNetworkReply> m_reply;
++    QTimer m_retryTimer;
++    QTimer m_headersTimer;
++    YouTubeWire::Decoder m_decoder;
++    QString m_apiKey, m_channelId, m_video, m_liveChatId, m_pageToken;
++    QSet<QString> m_seen;
++    QQueue<QString> m_seenOrder;
++    quint64 m_generation = 0;
++    bool m_active = false, m_connected = false, m_receivedBatch = false;
++    int m_failures = 0;
++    int m_streamCalls = 0;
+ };
+diff --git a/src/youtube-wire.h b/src/youtube-wire.h
+new file mode 100644
+index 0000000..d8c714a
+--- /dev/null
++++ b/src/youtube-wire.h
+@@ -0,0 +1,128 @@
++#pragma once
++// Read-only subset of Google's stream_list.proto. Unknown fields are skipped.
++// gRPC framing is handled here; HTTP/2 and TLS are handled by Qt Network.
++#include <QByteArray>
++#include <QVector>
++#include <QString>
++namespace YouTubeWire {
++constexpr quint32 MaxFrame = 8 * 1024 * 1024;
++struct Field { quint32 number; quint32 wire; quint64 scalar; QByteArray bytes; };
++inline void varint(QByteArray &out, quint64 n) {
++    while (n > 127) { out.append(char((n & 127) | 128)); n >>= 7; }
++    out.append(char(n));
++}
++inline void stringField(QByteArray &out, quint32 number, const QByteArray &value) {
++    varint(out, (quint64(number) << 3) | 2); varint(out, quint64(value.size())); out += value;
++}
++inline bool readVarint(const QByteArray &data, qsizetype &pos, quint64 &n) {
++    n = 0;
++    for (int shift = 0; shift < 70; shift += 7) {
++        if (pos >= data.size()) return false;
++        const auto b = static_cast<unsigned char>(data.at(pos++));
++        if (shift == 63 && b > 1) return false;
++        n |= quint64(b & 127) << shift;
++        if (!(b & 128)) return true;
++    }
++    return false;
++}
++inline bool fields(const QByteArray &data, QVector<Field> &out) {
++    qsizetype pos = 0;
++    while (pos < data.size()) {
++        quint64 tag = 0;
++        if (!readVarint(data, pos, tag) || !(tag >> 3) || (tag >> 3) > 0x1fffffff) return false;
++        Field f{quint32(tag >> 3), quint32(tag & 7), 0, {}};
++        quint64 length = 0;
++        switch (f.wire) {
++        case 0: if (!readVarint(data, pos, f.scalar)) return false; break;
++        case 1: length = 8; break;
++        case 2: if (!readVarint(data, pos, length)) return false; break;
++        case 5: length = 4; break;
++        default: return false;
++        }
++        if (length > quint64(data.size() - pos)) return false;
++        if (f.wire == 2) f.bytes = data.mid(pos, qsizetype(length));
++        pos += qsizetype(length);
++        out.push_back(f);
++    }
++    return true;
++}
++inline QByteArray frame(const QByteArray &proto) {
++    QByteArray out(5, '\0');
++    const auto n = quint32(proto.size());
++    for (int i = 0; i < 4; ++i) out[1 + i] = char(n >> (24 - 8 * i));
++    return out + proto;
++}
++inline QByteArray request(const QString &chatId, const QString &pageToken) {
++    QByteArray proto;
++    stringField(proto, 1, chatId.toUtf8());
++    if (!pageToken.isEmpty()) stringField(proto, 99, pageToken.toUtf8());
++    for (const auto *part : {"id", "snippet", "authorDetails"}) stringField(proto, 100, part);
++    return frame(proto);
++}
++struct Message {
++    QString id, author, text, published;
++    bool owner = false, moderator = false, subscriber = false, ended = false;
++};
++struct Batch { QString nextPageToken; bool offline = false; QVector<Message> messages; };
++inline bool decodeMessage(const QByteArray &data, Message &m) {
++    QVector<Field> fs;
++    if (!fields(data, fs)) return false;
++    for (const auto &f : fs) {
++        if (f.number == 101 && f.wire == 2) m.id = QString::fromUtf8(f.bytes);
++        if ((f.number == 2 || f.number == 3) && f.wire == 2) {
++            QVector<Field> inner;
++            if (!fields(f.bytes, inner)) return false;
++            for (const auto &v : inner) {
++                if (f.number == 2) {
++                    if (v.number == 1 && v.wire == 0) m.ended = v.scalar == 4;
++                    if (v.number == 4 && v.wire == 2) m.published = QString::fromUtf8(v.bytes);
++                    if (v.number == 16 && v.wire == 2) m.text = QString::fromUtf8(v.bytes);
++                } else {
++                    if (v.number == 103 && v.wire == 2) m.author = QString::fromUtf8(v.bytes);
++                    if (v.number == 5 && v.wire == 0) m.owner = v.scalar != 0;
++                    if (v.number == 6 && v.wire == 0) m.subscriber = v.scalar != 0;
++                    if (v.number == 7 && v.wire == 0) m.moderator = v.scalar != 0;
++                }
++            }
++        }
++    }
++    return true;
++}
++inline bool decodeBatch(const QByteArray &data, Batch &batch) {
++    QVector<Field> fs;
++    if (!fields(data, fs)) return false;
++    for (const auto &f : fs) {
++        if (f.number == 100602 && f.wire == 2) batch.nextPageToken = QString::fromUtf8(f.bytes);
++        if (f.number == 2 && f.wire == 2) batch.offline = !f.bytes.isEmpty();
++        if (f.number == 1007 && f.wire == 2) {
++            Message msg;
++            if (!decodeMessage(f.bytes, msg)) return false;
++            batch.messages.push_back(msg);
++        }
++    }
++    return true;
++}
++// Stateful across arbitrary HTTP/2 DATA chunks; rejects compression and huge frames.
++class Decoder {
++public:
++    bool feed(const QByteArray &chunk, QVector<Batch> &batches) {
++        buffer += chunk;
++        while (buffer.size() >= 5) {
++            if (buffer.at(0) != 0) return false;
++            quint32 n = 0;
++            for (int i = 1; i <= 4; ++i) n = (n << 8) | static_cast<unsigned char>(buffer.at(i));
++            if (n > MaxFrame) return false;
++            if (buffer.size() < qsizetype(n) + 5) return true;
++            Batch batch;
++            if (!decodeBatch(buffer.mid(5, n), batch)) return false;
++            buffer.remove(0, qsizetype(n) + 5);
++            batches.push_back(batch);
++        }
++        return true;
++    }
++    bool empty() const { return buffer.isEmpty(); }
++    void clear() { buffer.clear(); }
++private:
++    QByteArray buffer;
++};
++}
+diff --git a/tests/CMakeLists.txt b/tests/CMakeLists.txt
+new file mode 100644
+index 0000000..c8cd516
+--- /dev/null
++++ b/tests/CMakeLists.txt
+@@ -0,0 +1,21 @@
++cmake_minimum_required(VERSION 3.22)
++project(QTChatTests LANGUAGES CXX)
++set(CMAKE_AUTOMOC ON)
++set(CMAKE_CXX_STANDARD 17)
++find_package(Qt6 REQUIRED COMPONENTS Core Gui Network Widgets Test)
++enable_testing()
++add_executable(qtchat-tests test-youtube.cpp ../src/youtube-chat.cpp ../src/youtube-chat.h ../src/twitch-irc.cpp ../src/twitch-irc.h log-stub.cpp)
++target_include_directories(qtchat-tests PRIVATE ../src stubs)
++target_link_libraries(qtchat-tests PRIVATE Qt6::Core Qt6::Gui Qt6::Network Qt6::Test)
++add_test(NAME youtube COMMAND qtchat-tests)
++# Compile every plugin translation unit against real Qt/OBS headers when available.
++find_path(OBS_INCLUDE_DIR obs-module.h PATH_SUFFIXES obs)
++if(OBS_INCLUDE_DIR)
++    file(GLOB PLUGIN_SOURCES ../src/*.cpp ../src/*.h)
++    add_library(plugin-compile-check OBJECT ${PLUGIN_SOURCES})
++    target_include_directories(plugin-compile-check PRIVATE ../src ${OBS_INCLUDE_DIR})
++    target_link_libraries(plugin-compile-check PRIVATE Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets)
++endif()
++add_executable(grpc-smoke grpc-smoke.cpp)
++target_link_libraries(grpc-smoke PRIVATE Qt6::Core Qt6::Network)
++target_include_directories(grpc-smoke PRIVATE ../src)
+diff --git a/tests/grpc-smoke.cpp b/tests/grpc-smoke.cpp
+new file mode 100644
+index 0000000..f269b32
+--- /dev/null
++++ b/tests/grpc-smoke.cpp
+@@ -0,0 +1,27 @@
++// Optional, non-authenticated transport check. No user keys are accepted.
++#include <QCoreApplication>
++#include <QNetworkAccessManager>
++#include <QNetworkReply>
++#include <QTimer>
++#include <QDebug>
++#include "youtube-wire.h"
++int main(int argc, char **argv) {
++    QCoreApplication app(argc, argv);
++    QNetworkAccessManager network;
++    QNetworkRequest req(QUrl("https://youtube.googleapis.com/youtube.api.v3.V3DataLiveChatMessageService/StreamList"));
++    req.setAttribute(QNetworkRequest::Http2DirectAttribute, true);
++    req.setHeader(QNetworkRequest::ContentTypeHeader,"application/grpc");
++    req.setRawHeader("te","trailers");
++    req.setRawHeader("grpc-accept-encoding","identity");
++    auto *reply = network.post(req, YouTubeWire::request("transport-check-no-credentials", {}));
++    QObject::connect(reply,&QNetworkReply::finished,&app,[&] {
++        qInfo() << "HTTP" << reply->attribute(QNetworkRequest::HttpStatusCodeAttribute)
++                << "HTTP2" << reply->attribute(QNetworkRequest::Http2WasUsedAttribute)
++                << "gRPC" << reply->rawHeader("grpc-status")
++                << "type" << reply->header(QNetworkRequest::ContentTypeHeader);
++        qInfo() << reply->readAll().left(1000);
++        app.exit(reply->attribute(QNetworkRequest::Http2WasUsedAttribute).toBool() ? 0 : 1);
++    });
++    QTimer::singleShot(20000,&app,[&]{ reply->abort(); app.exit(2); });
++    return app.exec();
++}
+diff --git a/tests/log-stub.cpp b/tests/log-stub.cpp
+new file mode 100644
+index 0000000..892c487
+--- /dev/null
++++ b/tests/log-stub.cpp
+@@ -0,0 +1,2 @@
++#include <cstdarg>
++void blog(int, const char *, ...) {}
+diff --git a/tests/stubs/obs-module.h b/tests/stubs/obs-module.h
+new file mode 100644
+index 0000000..b4a460b
+--- /dev/null
++++ b/tests/stubs/obs-module.h
+@@ -0,0 +1,4 @@
++#pragma once
++#define LOG_INFO 300
++#define LOG_ERROR 100
++void blog(int, const char *, ...);
+diff --git a/tests/test-youtube.cpp b/tests/test-youtube.cpp
+new file mode 100644
+index 0000000..9f42db6
+--- /dev/null
++++ b/tests/test-youtube.cpp
+@@ -0,0 +1,201 @@
++#include <QtTest>
++#include <QNetworkReply>
++#include <QTcpServer>
++#include <QTcpSocket>
++#include <memory>
++#include "twitch-irc.h"
++#include "youtube-chat.h"
++
++using namespace YouTubeWire;
++// Handwritten fixture from Google's published protobuf field numbers, not the
++// production encoder. Includes Unicode and fields outside our read-only subset.
++static QByteArray fixture() {
++    const QByteArray snippet = QByteArray::fromHex("08012218323032362d31312d30315431323a30303a30302e3030305a82010a68656c6c6f20f09f9880");
++    QByteArray author; stringField(author, 103, "Nolan"); varint(author, 5 << 3); varint(author, 1);
++    QByteArray msg; stringField(msg, 101, "message-1"); stringField(msg, 2, snippet); stringField(msg, 3, author);
++    QByteArray batch; stringField(batch, 100602, "resume-1"); stringField(batch, 1007, msg);
++    stringField(batch, 25000, "unknown-field");
++    return frame(batch);
++}
++class FakeReply : public QNetworkReply {
++public:
++    FakeReply(int http, QByteArray bytes, QByteArray grpc = {}) : body(std::move(bytes)) {
++        setAttribute(QNetworkRequest::HttpStatusCodeAttribute,http);
++        setHeader(QNetworkRequest::ContentTypeHeader,"application/grpc");
++        if (!grpc.isEmpty()) setRawHeader("grpc-status",grpc);
++        open(QIODevice::ReadOnly);
++    }
++    void abort() override {}
++    qint64 bytesAvailable() const override { return body.size() + QNetworkReply::bytesAvailable(); }
++protected:
++    qint64 readData(char *data,qint64 n) override {
++        const auto count = std::min(n,qint64(body.size()));
++        if (!count) return -1;
++        memcpy(data,body.constData(),size_t(count)); body.remove(0,count); return count;
++    }
++private:
++    QByteArray body;
++};
++class YouTubeTests : public QObject {
++    Q_OBJECT
++private slots:
++    void twitchTaggedMessage() {
++        TwitchIRC twitch;
++        const auto msg=twitch.parsePrivmsg("@badges=moderator/1;color=#12AB34;emotes=25:0-4;id=abc;mod=1;subscriber=1 :nolan!nolan@nolan.tmi.twitch.tv PRIVMSG #channel :Kappa hello");
++        QCOMPARE(msg.username,QString("nolan"));
++        QCOMPARE(msg.message,QString("Kappa hello"));
++        QCOMPARE(msg.id,QString("abc"));
++        QCOMPARE(msg.usernameColor,QColor("#12AB34"));
++        QVERIFY(msg.isModerator); QVERIFY(msg.isSubscriber);
++    }
++    void streamingRequest() {
++        const auto framed = request("chat", "resume");
++        QVERIFY(framed.startsWith(QByteArray(1,'\0')));
++        QVector<Field> fs; QVERIFY(fields(framed.mid(5),fs));
++        QCOMPARE(fs.size(),5);
++        QCOMPARE(fs[0].number,quint32(1)); QCOMPARE(fs[0].bytes,QByteArray("chat"));
++        QCOMPARE(fs[1].number,quint32(99)); QCOMPARE(fs[1].bytes,QByteArray("resume"));
++        QCOMPARE(fs[4].bytes,QByteArray("authorDetails"));
++    }
++    void fragmentedAndCombinedFrames() {
++        const auto bytes = fixture();
++        for (qsizetype split = 0; split <= bytes.size(); ++split) {
++            Decoder decoder; QVector<Batch> out;
++            QVERIFY(decoder.feed(bytes.left(split),out));
++            QVERIFY(decoder.feed(bytes.mid(split),out));
++            QCOMPARE(out.size(),1); QCOMPARE(out[0].nextPageToken,QString("resume-1"));
++            QCOMPARE(out[0].messages.size(),1); QCOMPARE(out[0].messages[0].id,QString("message-1"));
++            QCOMPARE(out[0].messages[0].text,QString::fromUtf8("hello 😀"));
++            QCOMPARE(out[0].messages[0].author,QString("Nolan")); QVERIFY(out[0].messages[0].owner);
++            QVERIFY(decoder.empty());
++        }
++        Decoder decoder; QVector<Batch> out;
++        for (const auto b : bytes) QVERIFY(decoder.feed(QByteArray(1,b),out));
++        QCOMPARE(out.size(),1);
++        QVERIFY(decoder.feed(bytes+bytes,out)); QCOMPARE(out.size(),3);
++    }
++    void invalidFrames() {
++        Decoder a; QVector<Batch> out;
++        QVERIFY(!a.feed(QByteArray::fromHex("0100000000"),out)); // Unsupported compression.
++        Decoder b; QVERIFY(!b.feed(QByteArray::fromHex("0001000000"),out)); // >8MiB.
++        Decoder c; QVERIFY(!c.feed(frame(QByteArray::fromHex("0a7f")),out)); // Truncated length.
++        QVector<Field> fs;
++        QVERIFY(!fields(QByteArray::fromHex("80808080808080808002"),fs)); // Overflow.
++        QVERIFY(!fields(QByteArray::fromHex("00"),fs)); // Invalid tag zero.
++        Decoder d; QVERIFY(d.feed(fixture().left(7),out)); QVERIFY(!d.empty());
++    }
++    void messageDedupeAndResume() {
++        YouTubeChat chat; QSignalSpy messages(&chat,&YouTubeChat::messageReceived);
++        QSignalSpy status(&chat,&YouTubeChat::statusChanged);
++        Decoder decoder; QVector<Batch> out; QVERIFY(decoder.feed(fixture(),out));
++        chat.m_active = true;
++        chat.handleBatch(out[0]); chat.handleBatch(out[0]);
++        QCOMPARE(messages.size(),1); QCOMPARE(chat.m_pageToken,QString("resume-1"));
++        QVERIFY(chat.isConnected()); QVERIFY(!status.isEmpty());
++        Batch heartbeat; chat.handleBatch(heartbeat);
++        QCOMPARE(chat.m_pageToken,QString("resume-1"));
++        Batch ended; ended.offline = true; chat.handleBatch(ended);
++        QVERIFY(!chat.m_active); QVERIFY(!chat.isConnected()); QVERIFY(!chat.m_retryTimer.isActive());
++    }
++    void backoffAndRetryCap() {
++        YouTubeChat chat; chat.m_active = true;
++        chat.retry("Network unavailable"); QCOMPARE(chat.m_retryTimer.interval(),15000);
++        chat.retry("Network unavailable"); QCOMPARE(chat.m_retryTimer.interval(),30000);
++        for (int i=0;i<7;++i) chat.retry("Network unavailable");
++        QVERIFY(!chat.m_active); QVERIFY(!chat.m_retryTimer.isActive());
++    }
++    void grpcQuotaStopsRequests() {
++        YouTubeChat chat; chat.m_active = true;
++        auto *reply = new FakeReply(200,{},"8");
++        chat.finishStream(reply,chat.m_generation);
++        QVERIFY(!chat.m_active); QVERIFY(!chat.m_retryTimer.isActive());
++    }
++    void http2StreamingAndTrailers() {
++        // A real local HTTP/2 connection: one DATA batch, then quota trailers.
++        QTcpServer server;
++        QVERIFY(server.listen(QHostAddress::LocalHost));
++        const auto packet = [](char type, char flags, quint32 stream, const QByteArray &body) {
++            QByteArray result;
++            for (int i=2;i>=0;--i) result.append(char(body.size() >> (8*i)));
++            result.append(type); result.append(flags);
++            for (int i=3;i>=0;--i) result.append(char(stream >> (8*i)));
++            return result + body;
++        };
++        const auto header = [](const QByteArray &key,const QByteArray &value) {
++            return QByteArray(1,'\0') + char(key.size()) + key + char(value.size()) + value;
++        };
++        connect(&server,&QTcpServer::newConnection,&server,[&] {
++            auto *socket = server.nextPendingConnection();
++            auto buffer = std::make_shared<QByteArray>();
++            auto preface = std::make_shared<bool>(false);
++            connect(socket,&QTcpSocket::readyRead,&server,[=] {
++                *buffer += socket->readAll();
++                if (!*preface) {
++                    if (buffer->size()<24) return;
++                    buffer->remove(0,24); *preface=true;
++                    socket->write(packet(4,0,0,{})); // Server SETTINGS.
++                }
++                while (buffer->size()>=9) {
++                    quint32 size=0,stream=0;
++                    for(int i=0;i<3;++i) size=(size<<8)|quint8(buffer->at(i));
++                    if(buffer->size()<qsizetype(size)+9) return;
++                    const auto type=buffer->at(3),flags=buffer->at(4);
++                    for(int i=5;i<9;++i) stream=(stream<<8)|quint8(buffer->at(i));
++                    buffer->remove(0,size+9);
++                    if(type==4 && !(flags&1)) socket->write(packet(4,1,0,{}));
++                    if(type==0 && (flags&1)) {
++                        socket->write(packet(1,4,stream,QByteArray(1,char(0x88))+header("content-type","application/grpc")));
++                        socket->write(packet(0,0,stream,fixture()));
++                        socket->write(packet(1,5,stream,header("grpc-status","8")));
++                    }
++                }
++            });
++        });
++        YouTubeChat chat; chat.m_active=true;
++        QSignalSpy messages(&chat,&YouTubeChat::messageReceived);
++        QNetworkRequest request(QUrl(QString("http://127.0.0.1:%1/stream").arg(server.serverPort())));
++        request.setAttribute(QNetworkRequest::Http2DirectAttribute,true);
++        request.setAttribute(QNetworkRequest::CacheSaveControlAttribute,false);
++        auto *reply=chat.m_network.post(request,YouTubeWire::request("test",{}));
++        chat.m_reply=reply;
++        const auto generation=chat.m_generation;
++        connect(reply,&QNetworkReply::readyRead,&chat,[&]{chat.consume(reply,generation);});
++        connect(reply,&QNetworkReply::finished,&chat,[&]{chat.finishStream(reply,generation);});
++        QTRY_VERIFY_WITH_TIMEOUT(!chat.m_active,5000);
++        QCOMPARE(messages.size(),1);
++        QVERIFY(!chat.m_retryTimer.isActive());
++        QCOMPARE(chat.m_pageToken,QString("resume-1"));
++    }
++    void staleReplyDoesNotReconnect() {
++        YouTubeChat chat; chat.m_active = true;
++        auto *reply = new FakeReply(200,fixture());
++        chat.finishStream(reply,chat.m_generation+1);
++        QVERIFY(!chat.isConnected()); QVERIFY(!chat.m_retryTimer.isActive());
++    }
++    void httpQuotaMessage() {
++        YouTubeChat chat;
++        FakeReply reply(403,{});
++        QVERIFY(chat.apiFailure(&reply,R"({"error":{"errors":[{"reason":"quotaExceeded"}]}})").contains("quota exhausted"));
++    }
++    void exactVideoUrls() {
++        QCOMPARE(YouTubeChat::videoId("https://www.youtube.com/watch?v=abcdefghijk&x=y"),QString("abcdefghijk"));
++        QCOMPARE(YouTubeChat::videoId("https://youtu.be/abcdefghijk?t=12"),QString("abcdefghijk"));
++        QCOMPARE(YouTubeChat::videoId("https://youtube.com/live/abcdefghijk"),QString("abcdefghijk"));
++        QVERIFY(YouTubeChat::videoId("https://evil.example/watch?v=abcdefghijk").isEmpty());
++        QVERIFY(YouTubeChat::videoId("not-a-video-id").isEmpty());
++    }
++    void secretRedaction() {
++        auto text = YouTubeChat::safeError("Error key=private-value https://example.com/?key=private-value AIzaSAMPLESECRET", "private-value");
++        QVERIFY(!text.contains("private-value")); QVERIFY(!text.contains("AIza")); QVERIFY(!text.contains("https://"));
++    }
++    void quietChatHasNoPollingTimer() {
++        YouTubeChat chat;
++        chat.m_active = true;
++        Decoder decoder; QVector<Batch> out; QVERIFY(decoder.feed(fixture(),out));
++        chat.handleBatch(out[0]);
++        QVERIFY(!chat.m_retryTimer.isActive()); QVERIFY(!chat.m_headersTimer.isActive());
++        QCOMPARE(chat.m_streamCalls,0);
++    }
++};
++QTEST_GUILESS_MAIN(YouTubeTests)
++#include "test-youtube.moc"
