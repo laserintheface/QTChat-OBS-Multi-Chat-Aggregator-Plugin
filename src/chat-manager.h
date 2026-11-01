@@ -22,6 +22,8 @@ public:
 
 	void connectYouTube(const QString &apiKey, const QString &channelId);
 	void disconnectYouTube();
+	void reconnectYouTube();
+	void setYouTubeVideo(const QString &video) { m_youtubeVideo = video; }
 
 	void disconnectAll();
 
@@ -41,6 +43,7 @@ public:
 signals:
 	void twitchConnectedChanged(bool connected);
 	void youtubeConnectedChanged(bool connected);
+	void youtubeStatusChanged(const QString &status);
 
 public slots:
 	void onTwitchMessage(const ChatMessage &message);
@@ -59,10 +62,12 @@ private:
 
 	QString m_twitchChannel;
 
+	QString m_youtubeVideo;
 	QString m_youtubeAPIKey;
 	QString m_youtubeChannelId;
 	QString m_youtubeRTMPUrl;
 
 	bool m_twitchEnabled = true;
 	bool m_youtubeEnabled = true;
+	bool m_youtubeAttempted = false;
 };

@@ -15,11 +15,17 @@ ChatDock::ChatDock(QWidget *parent) : QDockWidget("QTChat", parent)
 	mainLayout->setContentsMargins(4, 4, 4, 4);
 
 	QHBoxLayout *headerLayout = new QHBoxLayout();
-	m_statusLabel = new QLabel("Disconnected", this);
+	m_statusLabel = new QLabel("Twitch: disconnected", this);
+	m_youtubeStatusLabel = new QLabel("YouTube: disconnected", this);
+	m_youtubeStatusLabel->setWordWrap(true);
+	auto *reconnect = new QPushButton("Reconnect YouTube", this);
+	connect(reconnect, &QPushButton::clicked, this, &ChatDock::reconnectYouTubeRequested);
 	m_clearButton = new QPushButton("Clear", this);
 	headerLayout->addWidget(m_statusLabel);
 	headerLayout->addStretch();
 	headerLayout->addWidget(m_clearButton);
+	mainLayout->addWidget(m_youtubeStatusLabel);
+	mainLayout->addWidget(reconnect);
 	mainLayout->addLayout(headerLayout);
 
 	m_tabWidget = new QTabWidget(this);
@@ -48,7 +54,7 @@ ChatDock::ChatDock(QWidget *parent) : QDockWidget("QTChat", parent)
 	m_scrollTimer = new QTimer(this);
 	m_scrollTimer->setInterval(100);
 	connect(m_scrollTimer, &QTimer::timeout, this, &ChatDock::onScrollTimeout);
-	m_scrollTimer->start();
+	// Scroll only when a new message arrives and the reader was at the bottom.
 
 	connect(m_clearButton, &QPushButton::clicked, this, &ChatDock::onClearButtonClicked);
 	connect(m_tabWidget, &QTabWidget::currentChanged, this, &ChatDock::onTabChanged);
@@ -76,6 +82,7 @@ void ChatDock::addMessage(const ChatMessage &message)
 
 void ChatDock::addMessageToList(QListWidget *list, const ChatMessage &message)
 {
+	const bool follow = list->verticalScrollBar()->value() >= list->verticalScrollBar()->maximum() - 12;
 	QListWidgetItem *item = new QListWidgetItem(formatMessage(message), list);
 	item->setData(Qt::UserRole, QVariant::fromValue(message));
 
@@ -93,6 +100,7 @@ void ChatDock::addMessageToList(QListWidget *list, const ChatMessage &message)
 	while (list->count() > m_messageLimit) {
 		delete list->takeItem(0);
 	}
+	if (follow) list->scrollToBottom();
 }
 
 QString ChatDock::formatMessage(const ChatMessage &message)
@@ -187,4 +195,13 @@ void ChatDock::onScrollTimeout()
 			scrollBar->setValue(scrollBar->maximum());
 		}
 	}
+}
+
+void ChatDock::setTwitchStatus(bool connected)
+{
+    m_statusLabel->setText(connected ? "Twitch: connected" : "Twitch: disconnected");
+}
+void ChatDock::setYouTubeStatus(const QString &status)
+{
+    m_youtubeStatusLabel->setText("YouTube: " + status);
 }

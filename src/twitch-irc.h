@@ -3,7 +3,7 @@
 #include <QObject>
 #include <QString>
 #include <QTimer>
-#include <QTcpSocket>
+#include <QSslSocket>
 #include "chat-message.h"
 
 class TwitchIRC : public QObject {
@@ -35,6 +35,7 @@ private slots:
 	void onReconnectTimer();
 
 private:
+	friend class YouTubeTests;
 	void sendPass(const QString &token);
 	void sendNick(const QString &username);
 	void sendJoin(const QString &channel);
@@ -42,12 +43,13 @@ private:
 	void parseMessage(const QString &rawMessage);
 	ChatMessage parsePrivmsg(const QString &message);
 
-	QTcpSocket *m_socket = nullptr;
+	QSslSocket *m_socket = nullptr;
 	QString m_username;
 	QString m_oauthToken;
 	QString m_channel;
 	QString m_server = "irc.chat.twitch.tv";
-	quint16 m_port = 6667;
+	quint16 m_port = 6697;
+	QByteArray m_readBuffer;
 
 	bool m_connected = false;
 	bool m_reconnectEnabled = true;

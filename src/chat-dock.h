@@ -20,6 +20,8 @@ public:
 
 	void addMessage(const ChatMessage &message);
 	void clearMessages();
+	void setTwitchStatus(bool connected);
+	void setYouTubeStatus(const QString &status);
 	void setMessageLimit(int limit);
 
 	enum class ViewMode { Combined, Separate };
@@ -29,6 +31,7 @@ public:
 
 signals:
 	void messageAdded(const ChatMessage &message);
+	void reconnectYouTubeRequested();
 
 private slots:
 	void onTabChanged(int index);
@@ -45,6 +48,7 @@ private:
 	QListWidget *m_youtubeList = nullptr;
 	QListWidget *m_combinedList = nullptr;
 	QLabel *m_statusLabel = nullptr;
+	QLabel *m_youtubeStatusLabel = nullptr;
 	QPushButton *m_clearButton = nullptr;
 
 	ViewMode m_viewMode = ViewMode::Combined;

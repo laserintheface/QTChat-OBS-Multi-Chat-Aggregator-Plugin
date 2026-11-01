@@ -4,6 +4,48 @@
 #include <QFile>
 #include <QTextStream>
 #include <QDir>
+#include <QSaveFile>
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <wincrypt.h>
+#endif
+
+static QString protectKey(const QString &text)
+{
+#ifdef Q_OS_WIN
+    if (text.isEmpty()) return {};
+    QByteArray utf8 = text.toUtf8();
+    DATA_BLOB input{static_cast<DWORD>(utf8.size()), reinterpret_cast<BYTE *>(utf8.data())};
+    DATA_BLOB output{};
+    if (!CryptProtectData(&input, L"QTChat YouTube key", nullptr, nullptr, nullptr,
+                          CRYPTPROTECT_UI_FORBIDDEN, &output)) return {};
+    const auto stored = "dpapi:" + QByteArray(reinterpret_cast<char *>(output.pbData), int(output.cbData)).toBase64();
+    LocalFree(output.pbData);
+    return QString::fromLatin1(stored);
+#else
+    return text;
+#endif
+}
+static QString unprotectKey(const QString &text)
+{
+    if (!text.startsWith("dpapi:")) return text; // Read legacy keys; upgrade on Save.
+#ifdef Q_OS_WIN
+    auto bytes = QByteArray::fromBase64(text.mid(6).toLatin1());
+    DATA_BLOB input{static_cast<DWORD>(bytes.size()), reinterpret_cast<BYTE *>(bytes.data())};
+    DATA_BLOB output{};
+    if (!CryptUnprotectData(&input, nullptr, nullptr, nullptr, nullptr,
+                            CRYPTPROTECT_UI_FORBIDDEN, &output)) return {};
+    const auto key = QString::fromUtf8(reinterpret_cast<char *>(output.pbData), int(output.cbData));
+    LocalFree(output.pbData);
+    return key;
+#else
+    return {};
+#endif
+}
+
 
 static const char *SETTINGS_FILE = "qtchat-settings.ini";
 
@@ -40,15 +82,15 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 	m_youtubeChannelIdEdit = new QLineEdit(this);
 	m_youtubeChannelIdEdit->setPlaceholderText("UC...");
 
-	m_youtubeRTMPURLEdit = new QLineEdit(this);
-	m_youtubeRTMPURLEdit->setPlaceholderText("rtmp://...");
+	m_youtubeVideoEdit = new QLineEdit(this);
+	m_youtubeVideoEdit->setPlaceholderText("https://www.youtube.com/watch?v=... (optional)");
 
 	m_youtubeEnabledCheck = new QCheckBox("Enabled", this);
 	m_youtubeEnabledCheck->setChecked(true);
 
 	youtubeLayout->addRow("API Key:", m_youtubeAPIKeyEdit);
 	youtubeLayout->addRow("Channel ID:", m_youtubeChannelIdEdit);
-	youtubeLayout->addRow("RTMP URL:", m_youtubeRTMPURLEdit);
+	youtubeLayout->addRow("Video URL or ID:", m_youtubeVideoEdit);
 	youtubeLayout->addRow("", m_youtubeEnabledCheck);
 	m_youtubeGroup->setLayout(youtubeLayout);
 
@@ -89,12 +131,10 @@ void SettingsDialog::loadSettings()
 		QTextStream in(&file);
 		while (!in.atEnd()) {
 			QString line = in.readLine();
-			QStringList parts = line.split("=");
-			if (parts.size() != 2)
-				continue;
-
-			QString key = parts[0].trimmed();
-			QString value = parts[1].trimmed();
+			const auto separator = line.indexOf('=');
+            if (separator < 1) continue;
+            const QString key = line.left(separator).trimmed();
+            const QString value = line.mid(separator + 1).trimmed();
 
 			if (key == "twitch_channel") {
 				m_twitchChannelEdit->setText(value);
@@ -103,12 +143,12 @@ void SettingsDialog::loadSettings()
 				m_twitchEnabledCheck->setChecked(value == "true");
 				blog(LOG_INFO, "[SettingsDialog] Loaded twitch_enabled: %s", qPrintable(value));
 			} else if (key == "youtube_apikey") {
-				m_youtubeAPIKeyEdit->setText(value);
+				m_youtubeAPIKeyEdit->setText(unprotectKey(value));
 			} else if (key == "youtube_channelid") {
 				m_youtubeChannelIdEdit->setText(value);
 				blog(LOG_INFO, "[SettingsDialog] Loaded youtube_channelid: '%s'", qPrintable(value));
-			} else if (key == "youtube_rtmp_url") {
-				m_youtubeRTMPURLEdit->setText(value);
+			} else if (key == "youtube_video") {
+				m_youtubeVideoEdit->setText(value);
 			} else if (key == "youtube_enabled") {
 				m_youtubeEnabledCheck->setChecked(value == "true");
 			}
@@ -117,7 +157,7 @@ void SettingsDialog::loadSettings()
 	}
 }
 
-void SettingsDialog::saveSettings()
+bool SettingsDialog::saveSettings()
 {
 	QString configDir = QDir::homePath() + "/.config/obs-studio";
 	QDir dir;
@@ -126,23 +166,31 @@ void SettingsDialog::saveSettings()
 	}
 
 	QString configPath = configDir + "/" + SETTINGS_FILE;
-	QFile file(configPath);
+	QSaveFile file(configPath);
 
 	if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
 		QTextStream out(&file);
 		out << "twitch_channel=" << m_twitchChannelEdit->text() << "\n";
 		out << "twitch_enabled=" << (m_twitchEnabledCheck->isChecked() ? "true" : "false") << "\n";
-		out << "youtube_apikey=" << m_youtubeAPIKeyEdit->text() << "\n";
+		const auto storedKey = protectKey(m_youtubeAPIKeyEdit->text().trimmed());
+        if (!m_youtubeAPIKeyEdit->text().trimmed().isEmpty() && storedKey.isEmpty()) {
+            QMessageBox::warning(this, "QTChat", "Could not protect the API key. Settings were not saved.");
+            return false;
+        }
+        out << "youtube_apikey=" << storedKey << "\n";
 		out << "youtube_channelid=" << m_youtubeChannelIdEdit->text() << "\n";
-		out << "youtube_rtmp_url=" << m_youtubeRTMPURLEdit->text() << "\n";
+		out << "youtube_video=" << m_youtubeVideoEdit->text() << "\n";
 		out << "youtube_enabled=" << (m_youtubeEnabledCheck->isChecked() ? "true" : "false") << "\n";
-		file.close();
+		out.flush();
+        if (file.commit()) return true;
 	}
+    QMessageBox::warning(this, "QTChat", "Could not save settings. Check file permissions.");
+    return false;
 }
 
 void SettingsDialog::onSaveClicked()
 {
-	saveSettings();
+	if (!saveSettings()) return;
 	emit settingsSaved();
 	accept();
 }
@@ -150,4 +198,10 @@ void SettingsDialog::onSaveClicked()
 void SettingsDialog::onCancelClicked()
 {
 	reject();
+}
+
+void SettingsDialog::reject()
+{
+    loadSettings();
+    QDialog::reject();
 }

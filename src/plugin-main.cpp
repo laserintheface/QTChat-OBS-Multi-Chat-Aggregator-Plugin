@@ -66,6 +66,12 @@ void QTChatPlugin::load()
 	m_settingsDialog = std::make_unique<SettingsDialog>();
 
 	m_chatManager->setChatWidget(m_chatDock.get());
+    connect(m_chatManager.get(), &ChatManager::twitchConnectedChanged,
+            m_chatDock.get(), &ChatDock::setTwitchStatus);
+    connect(m_chatManager.get(), &ChatManager::youtubeStatusChanged,
+            m_chatDock.get(), &ChatDock::setYouTubeStatus);
+    connect(m_chatDock.get(), &ChatDock::reconnectYouTubeRequested,
+            m_chatManager.get(), &ChatManager::reconnectYouTube);
 	m_rtmpDetector->setChatManager(m_chatManager.get());
 
 	setupDocks();
@@ -87,7 +93,8 @@ void QTChatPlugin::onObsReady()
 		m_chatDock->show();
 	}
 
-	if (m_settingsDialog) {
+	if (m_settingsDialog && m_settingsDialog->getTwitchChannel().isEmpty() &&
+        m_settingsDialog->getYouTubeAPIKey().isEmpty()) {
 		m_settingsDialog->show();
 		m_settingsDialog->raise();
 		m_settingsDialog->activateWindow();
@@ -116,7 +123,7 @@ void QTChatPlugin::applySettings()
 		m_chatManager->setTwitchChannel(twitchChannel);
 		m_chatManager->setYouTubeAPIKey(m_settingsDialog->getYouTubeAPIKey());
 		m_chatManager->setYouTubeChannelId(m_settingsDialog->getYouTubeChannelId());
-		m_chatManager->setYouTubeRTMPUrl(m_settingsDialog->getYouTubeRTMPUrl());
+		m_chatManager->setYouTubeVideo(m_settingsDialog->getYouTubeVideo());
 		m_chatManager->enablePlatform(RTMPDetector::Platform::Twitch,
 					       m_settingsDialog->isTwitchEnabled());
 		m_chatManager->enablePlatform(RTMPDetector::Platform::YouTube,
@@ -202,6 +209,9 @@ void QTChatPlugin::setupMenu()
 	m_settingsAction = new QAction("Settings", m_menu);
 	connect(m_settingsAction, &QAction::triggered, this, &QTChatPlugin::onSettingsClicked);
 	m_menu->addAction(m_settingsAction);
+    auto *reconnect = new QAction("Reconnect YouTube", m_menu);
+    connect(reconnect, &QAction::triggered, m_chatManager.get(), &ChatManager::reconnectYouTube);
+    m_menu->addAction(reconnect);
 
 	m_toggleDockAction = new QAction("Combined", m_menu);
 	connect(m_toggleDockAction, &QAction::triggered, this, &QTChatPlugin::onToggleDock);
@@ -247,7 +257,7 @@ extern "C" {
 bool obs_module_load(void)
 {
 	blog(LOG_INFO, "=================================================");
-	blog(LOG_INFO, "[QTChat] Initializing QTChat Plugin v1.0.0");
+	blog(LOG_INFO, "[QTChat] Initializing QTChat Plugin v1.1.0-streaming");
 	blog(LOG_INFO, "=================================================");
 
 	try {

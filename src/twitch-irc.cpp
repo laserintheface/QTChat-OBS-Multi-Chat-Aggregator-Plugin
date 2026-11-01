@@ -15,7 +15,7 @@ static const QMap<QString, QColor> TwitchUsernameColors = {
 
 TwitchIRC::TwitchIRC(QObject *parent) : QObject(parent)
 {
-	m_socket = new QTcpSocket(this);
+	m_socket = new QSslSocket(this);
 	m_reconnectTimer = new QTimer(this);
 	m_pingTimer = new QTimer(this);
 
@@ -23,7 +23,7 @@ TwitchIRC::TwitchIRC(QObject *parent) : QObject(parent)
 	m_pingTimer->setInterval(60000);
 
 	connect(m_socket, &QTcpSocket::readyRead, this, &TwitchIRC::onReadyRead);
-	connect(m_socket, &QTcpSocket::connected, this, &TwitchIRC::onConnected);
+	connect(m_socket, &QSslSocket::encrypted, this, &TwitchIRC::onConnected);
 	connect(m_socket, &QTcpSocket::disconnected, this, &TwitchIRC::onDisconnected);
 	connect(m_socket, &QTcpSocket::errorOccurred, this, [this](QAbstractSocket::SocketError socketError) {
 		onError(socketError);
@@ -43,27 +43,20 @@ TwitchIRC::~TwitchIRC()
 
 void TwitchIRC::connectToChannel(const QString &username, const QString &oauthToken, const QString &channel)
 {
-	m_username = username.toLower();
-	m_oauthToken = oauthToken;
-	m_channel = channel.toLower();
-
-	m_reconnectAttempts = 0;
-
-	blog(LOG_INFO, "[TwitchIRC] Attempting to connect to channel: '%s' (server: %s, port: %d)",
-	     qPrintable(m_channel), qPrintable(m_server), m_port);
-
-	if (m_socket->isOpen() || m_socket->state() == QAbstractSocket::ConnectingState) {
-		blog(LOG_INFO, "[TwitchIRC] Already connected or connecting, closing existing connection first");
-		m_socket->close();
-	}
-
-	m_socket->connectToHost(m_server, m_port);
+    disconnect();
+    blockSignals(false);
+    m_reconnectEnabled = true;
+    m_username = username.toLower();
+    m_oauthToken = oauthToken;
+    m_channel = channel.toLower();
+    m_readBuffer.clear();
+    m_reconnectAttempts = 0;
+    m_socket->connectToHostEncrypted(m_server, m_port);
 }
 
 void TwitchIRC::disconnect()
 {
-	// Block signals to prevent emitting signals during shutdown
-	blockSignals(true);
+	// Close deliberately without scheduling another reconnect.
 
 	m_reconnectEnabled = false;
 	m_reconnectTimer->stop();
@@ -77,6 +70,7 @@ void TwitchIRC::disconnect()
 	}
 
 	m_connected = false;
+	emit disconnected();
 	// Don't emit signals during shutdown - we're being destroyed
 }
 
@@ -120,7 +114,9 @@ QString TwitchIRC::parseChannelName(const QString &input)
 
 void TwitchIRC::onConnected()
 {
-	blog(LOG_INFO, "[TwitchIRC] Connected to Twitch IRC");
+	m_reconnectTimer->stop();
+	blog(LOG_INFO, "[TwitchIRC] Connected to Twitch IRC over TLS");
+	m_socket->write("CAP REQ :twitch.tv/tags twitch.tv/commands\r\n");
 
 	// Support anonymous connection (no OAuth required for read-only chat)
 	if (!m_oauthToken.isEmpty()) {
@@ -155,12 +151,20 @@ void TwitchIRC::onError(QAbstractSocket::SocketError socketError)
 	QString errorMsg = m_socket->errorString();
 	blog(LOG_ERROR, "[TwitchIRC] Socket error (%d): %s", socketError, qPrintable(errorMsg));
 	emit errorOccurred(errorMsg);
+	if (m_reconnectEnabled && m_reconnectAttempts < m_maxReconnectAttempts && !m_reconnectTimer->isActive())
+		m_reconnectTimer->start();
 }
 
 void TwitchIRC::onReadyRead()
 {
-	QByteArray data = m_socket->readAll();
-	QStringList lines = QString::fromUtf8(data).split("\r\n", Qt::SkipEmptyParts);
+	m_readBuffer += m_socket->readAll();
+    if (m_readBuffer.size() > 65536) { m_readBuffer.clear(); m_socket->abort(); return; }
+    QStringList lines;
+    int end = -1;
+    while ((end = m_readBuffer.indexOf("\r\n")) >= 0) {
+        lines.append(QString::fromUtf8(m_readBuffer.left(end)));
+        m_readBuffer.remove(0, end + 2);
+    }
 
 	for (const QString &line : lines) {
 		if (line.isEmpty())
@@ -176,7 +180,14 @@ void TwitchIRC::onReadyRead()
 			parseMessage(line);
 		}
 
-		if (line.contains("376") || line.contains("366")) {
+		QString commandLine = line;
+		if (commandLine.startsWith('@')) commandLine = commandLine.section(' ', 1);
+		const auto command = commandLine.section(' ', 1, 1);
+		if (command == "RECONNECT") {
+			m_socket->abort();
+			continue;
+		}
+		if (command == "366") {
 			m_connected = true;
 			m_pingTimer->start();
 			m_reconnectAttempts = 0;
@@ -190,6 +201,7 @@ void TwitchIRC::onReconnectTimer()
 {
 	m_reconnectTimer->stop();
 	m_reconnectAttempts++;
+	m_readBuffer.clear();
 
 	blog(LOG_INFO, "[TwitchIRC] Reconnecting... Attempt %d/%d", m_reconnectAttempts, m_maxReconnectAttempts);
 
@@ -197,7 +209,7 @@ void TwitchIRC::onReconnectTimer()
 		m_socket->close();
 	}
 
-	m_socket->connectToHost(m_server, m_port);
+	m_socket->connectToHostEncrypted(m_server, m_port);
 }
 
 void TwitchIRC::sendPass(const QString &token)
@@ -234,75 +246,36 @@ void TwitchIRC::parseMessage(const QString &rawMessage)
 
 ChatMessage TwitchIRC::parsePrivmsg(const QString &message)
 {
-	ChatMessage msg;
-	msg.platform = "twitch";
-	msg.timestamp = QDateTime::currentDateTime();
-
-	int firstColonPos = message.indexOf(":");
-	if (firstColonPos == -1)
-		return msg;
-
-	int prefixEndPos = message.indexOf(" ", firstColonPos);
-	if (prefixEndPos == -1)
-		return msg;
-
-	QString prefix = message.mid(firstColonPos + 1, prefixEndPos - firstColonPos - 1);
-
-	int exclamationPos = prefix.indexOf("!");
-	if (exclamationPos != -1) {
-		msg.username = prefix.left(exclamationPos);
-	}
-
-	int messageStart = message.indexOf("PRIVMSG #", firstColonPos);
-	if (messageStart == -1)
-		return msg;
-
-	messageStart = message.indexOf(":", messageStart);
-	if (messageStart == -1)
-		return msg;
-
-	msg.message = message.mid(messageStart + 1);
-
-	int atPos = message.indexOf("@");
-	if (atPos != -1) {
-		QString tags = message.mid(atPos + 1, firstColonPos - atPos - 1);
-
-		int colorStart = tags.indexOf("color=");
-		if (colorStart != -1) {
-			int colorEnd = tags.indexOf(";", colorStart);
-			QString colorName;
-			if (colorEnd != -1) {
-				colorName = tags.mid(colorStart + 6, colorEnd - colorStart - 6);
-			} else {
-				colorName = tags.mid(colorStart + 6);
-			}
-			if (!colorName.isEmpty() && TwitchUsernameColors.contains(colorName)) {
-				msg.usernameColor = TwitchUsernameColors.value(colorName);
-			}
-		}
-
-		if (tags.contains("subscriber=1")) {
-			msg.isSubscriber = true;
-		}
-		if (tags.contains("user-type=mod")) {
-			msg.isModerator = true;
-		}
-		if (tags.contains("user-type=global_mod")) {
-			msg.isModerator = true;
-		}
-		if (tags.contains("user-type=admin")) {
-			msg.isModerator = true;
-		}
-		if (tags.contains("user-type=broadcaster")) {
-			msg.isBroadcaster = true;
-		}
-	}
-
-	if (msg.usernameColor == QColor()) {
-		uint hash = static_cast<uint>(qHash(msg.username));
-		int colorIndex = hash % TwitchUsernameColors.size();
-		msg.usernameColor = TwitchUsernameColors.values().at(colorIndex);
-	}
-
-	return msg;
+    ChatMessage msg;
+    msg.platform = "twitch";
+    msg.timestamp = QDateTime::currentDateTime();
+    QString rest = message;
+    QMap<QString, QString> tags;
+    if (rest.startsWith('@')) {
+        const auto end = rest.indexOf(' ');
+        if (end < 0) return msg;
+        for (const auto &tag : rest.mid(1, end - 1).split(';')) {
+            const auto equals = tag.indexOf('=');
+            if (equals > 0) tags.insert(tag.left(equals), tag.mid(equals + 1));
+        }
+        rest = rest.mid(end + 1);
+    }
+    if (!rest.startsWith(':')) return msg;
+    const auto prefixEnd = rest.indexOf(' ');
+    if (prefixEnd < 0) return msg;
+    msg.username = rest.mid(1, prefixEnd - 1).section('!', 0, 0);
+    rest = rest.mid(prefixEnd + 1);
+    if (!rest.startsWith("PRIVMSG #")) return msg;
+    const auto textStart = rest.indexOf(" :");
+    if (textStart < 0) return msg;
+    msg.message = rest.mid(textStart + 2);
+    msg.id = tags.value("id");
+    const QColor color(tags.value("color"));
+    if (color.isValid()) msg.usernameColor = color;
+    else msg.usernameColor = TwitchUsernameColors.values().at(qHash(msg.username) % TwitchUsernameColors.size());
+    msg.isSubscriber = tags.value("subscriber") == "1";
+    msg.isModerator = tags.value("mod") == "1";
+    msg.isBroadcaster = tags.value("badges").contains("broadcaster/");
+    msg.isVip = tags.value("badges").contains("vip/");
+    return msg;
 }

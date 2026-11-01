@@ -14,6 +14,7 @@ ChatManager::ChatManager(QObject *parent)
 	connect(m_youtubeChat.get(), &YouTubeChat::messageReceived, this, &ChatManager::onYouTubeMessage);
 	connect(m_youtubeChat.get(), &YouTubeChat::connected, this, &ChatManager::onYouTubeConnected);
 	connect(m_youtubeChat.get(), &YouTubeChat::disconnected, this, &ChatManager::onYouTubeDisconnected);
+	connect(m_youtubeChat.get(), &YouTubeChat::statusChanged, this, &ChatManager::youtubeStatusChanged);
 }
 
 ChatManager::~ChatManager()
@@ -64,7 +65,8 @@ void ChatManager::connectYouTube(const QString &apiKey, const QString &channelId
 	m_youtubeChannelId = channelId;
 
 	blog(LOG_INFO, "[ChatManager] Connecting to YouTube: %s", qPrintable(channelId));
-	m_youtubeChat->connectToChannel(apiKey, channelId);
+	m_youtubeAttempted = true;
+	m_youtubeChat->connectToChannel(apiKey, channelId, m_youtubeVideo);
 }
 
 void ChatManager::disconnectYouTube()
@@ -113,30 +115,26 @@ bool ChatManager::isYouTubeConnected() const
 	return m_youtubeChat->isConnected();
 }
 
+void ChatManager::reconnectYouTube()
+{
+    m_youtubeChat->disconnect();
+    if (m_youtubeEnabled) connectYouTube(m_youtubeAPIKey, m_youtubeChannelId);
+    else emit youtubeStatusChanged("Disabled");
+}
+
 void ChatManager::applySettings()
 {
-	blog(LOG_INFO, "[ChatManager] applySettings() called");
-
-	blog(LOG_INFO, "[ChatManager] applySettings - m_twitchEnabled=%d, m_twitchChannel='%s'",
-	     m_twitchEnabled, qPrintable(m_twitchChannel));
-
-	if (m_twitchEnabled && !m_twitchChannel.isEmpty()) {
-		if (!m_twitchIRC->isConnected()) {
-			blog(LOG_INFO, "[ChatManager] applySettings - calling connectTwitch()");
-			connectTwitch(m_twitchChannel);
-		} else {
-			blog(LOG_INFO, "[ChatManager] applySettings - Twitch already connected, skipping");
-		}
-	} else {
-		blog(LOG_WARNING, "[ChatManager] applySettings - NOT connecting Twitch (enabled=%d, channel='%s')",
-		     m_twitchEnabled, qPrintable(m_twitchChannel));
-	}
-
-	if (m_youtubeEnabled && !m_youtubeAPIKey.isEmpty() && !m_youtubeChannelId.isEmpty()) {
-		if (!m_youtubeChat->isConnected()) {
-			connectYouTube(m_youtubeAPIKey, m_youtubeChannelId);
-		}
-	}
+    if (m_twitchEnabled && !m_twitchChannel.trimmed().isEmpty()) {
+        const auto channel = TwitchIRC::parseChannelName(m_twitchChannel);
+        if (m_twitchIRC->getChannel() != channel || !m_twitchIRC->isConnected())
+            connectTwitch(channel);
+    } else disconnectTwitch();
+    if (m_youtubeEnabled)
+        connectYouTube(m_youtubeAPIKey, m_youtubeChannelId);
+    else {
+        disconnectYouTube();
+        emit youtubeStatusChanged("Disabled");
+    }
 }
 
 void ChatManager::onTwitchMessage(const ChatMessage &message)
@@ -179,37 +177,12 @@ void ChatManager::onYouTubeDisconnected()
 
 void ChatManager::onOutputDetected(const QString &url, RTMPDetector::Platform platform)
 {
-	blog(LOG_INFO, "[ChatManager] Output detected: %s (platform: %d)", qPrintable(url), (int)platform);
-
-	switch (platform) {
-	case RTMPDetector::Platform::Twitch:
-		if (!m_twitchEnabled) {
-			blog(LOG_INFO, "[ChatManager] Twitch detected but platform is disabled, enabling...");
-			enablePlatform(RTMPDetector::Platform::Twitch, true);
-		}
-		if (!m_twitchChannel.isEmpty()) {
-			blog(LOG_INFO, "[ChatManager] Twitch platform detected, connecting to channel: %s",
-			     qPrintable(m_twitchChannel));
-			connectTwitch(m_twitchChannel);
-		} else {
-			blog(LOG_WARNING, "[ChatManager] Twitch detected but no channel configured in settings");
-		}
-		break;
-
-	case RTMPDetector::Platform::YouTube:
-		if (!m_youtubeEnabled) {
-			blog(LOG_INFO, "[ChatManager] YouTube detected but platform is disabled, enabling...");
-			enablePlatform(RTMPDetector::Platform::YouTube, true);
-		}
-		if (!m_youtubeAPIKey.isEmpty() && !m_youtubeChannelId.isEmpty()) {
-			blog(LOG_INFO, "[ChatManager] YouTube platform detected, connecting...");
-			connectYouTube(m_youtubeAPIKey, m_youtubeChannelId);
-		} else {
-			blog(LOG_WARNING, "[ChatManager] YouTube detected but API key or channel ID not configured");
-		}
-		break;
-
-	default:
-		break;
-	}
+    Q_UNUSED(url);
+    // Detection runs repeatedly. It must not override Disabled or restart a
+    // quota/auth failure every five seconds. Manual reconnect is explicit.
+    if (platform == RTMPDetector::Platform::Twitch && m_twitchEnabled &&
+        !m_twitchIRC->isConnected() && m_twitchIRC->getChannel().isEmpty())
+        connectTwitch(m_twitchChannel);
+    if (platform == RTMPDetector::Platform::YouTube && m_youtubeEnabled && !m_youtubeAttempted)
+        connectYouTube(m_youtubeAPIKey, m_youtubeChannelId);
 }

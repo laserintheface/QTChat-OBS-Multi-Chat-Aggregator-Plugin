@@ -16,6 +16,7 @@ class SettingsDialog : public QDialog {
 public:
 	explicit SettingsDialog(QWidget *parent = nullptr);
 	~SettingsDialog();
+	void reject() override;
 
 	// Getter methods for settings
 	QString getTwitchChannel() const { return m_twitchChannelEdit->text(); }
@@ -23,7 +24,7 @@ public:
 
 	QString getYouTubeAPIKey() const { return m_youtubeAPIKeyEdit->text(); }
 	QString getYouTubeChannelId() const { return m_youtubeChannelIdEdit->text(); }
-	QString getYouTubeRTMPUrl() const { return m_youtubeRTMPURLEdit->text(); }
+	QString getYouTubeVideo() const { return m_youtubeVideoEdit->text(); }
 	bool isYouTubeEnabled() const { return m_youtubeEnabledCheck->isChecked(); }
 
 signals:
@@ -35,7 +36,7 @@ private slots:
 
 private:
 	void loadSettings();
-	void saveSettings();
+	bool saveSettings();
 
 	QGroupBox *m_twitchGroup = nullptr;
 	QLineEdit *m_twitchChannelEdit = nullptr;
@@ -44,7 +45,7 @@ private:
 	QGroupBox *m_youtubeGroup = nullptr;
 	QLineEdit *m_youtubeAPIKeyEdit = nullptr;
 	QLineEdit *m_youtubeChannelIdEdit = nullptr;
-	QLineEdit *m_youtubeRTMPURLEdit = nullptr;
+	QLineEdit *m_youtubeVideoEdit = nullptr;
 	QCheckBox *m_youtubeEnabledCheck = nullptr;
 
 	QPushButton *m_saveButton = nullptr;

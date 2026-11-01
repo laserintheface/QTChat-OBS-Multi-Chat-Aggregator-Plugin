@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include <QString>
 #include <QColor>
 #include <QDateTime>

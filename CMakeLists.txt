@@ -41,19 +41,9 @@ if(ENABLE_FRONTEND_API)
 endif()
 
 if(ENABLE_QT)
-  find_package(Qt6 COMPONENTS Widgets Core Network)
-  if(NOT Qt6_FOUND)
-    find_package(Qt5 REQUIRED COMPONENTS Widgets Network)
-    set(USE_QT5 ON)
-  endif()
-  
-  if(USE_QT5)
-    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt5::Widgets Qt5::Network)
-    target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE QT_DEPRECATED_WARNINGS)
-  else()
-    target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets Qt6::Network)
-    set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES AUTOMOC ON)
-  endif()
+  find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Core Network)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::Core Qt6::Widgets Qt6::Network)
+  set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES AUTOMOC ON)
 endif()
 
 # Create precompiled header
@@ -73,6 +63,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
   ./src/chat-manager.cpp
   ./src/twitch-irc.h
   ./src/twitch-irc.cpp
+  ./src/youtube-wire.h
   ./src/youtube-chat.h
   ./src/youtube-chat.cpp
   ./src/rtmp-detector.h
@@ -92,5 +83,5 @@ set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_nam
 
 if(WIN32)
   set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES SUFFIX ".dll")
-  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE user32.lib)
+  target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE user32.lib crypt32.lib)
 endif()
