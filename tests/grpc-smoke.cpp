@@ -9,7 +9,8 @@ int main(int argc, char **argv) {
     QCoreApplication app(argc, argv);
     QNetworkAccessManager network;
     QNetworkRequest req(QUrl("https://youtube.googleapis.com/youtube.api.v3.V3DataLiveChatMessageService/StreamList"));
-    req.setAttribute(QNetworkRequest::Http2DirectAttribute, true);
+    req.setAttribute(QNetworkRequest::Http2AllowedAttribute, true);
+    req.setAttribute(QNetworkRequest::Http2DirectAttribute, false);
     req.setHeader(QNetworkRequest::ContentTypeHeader,"application/grpc");
     req.setRawHeader("te","trailers");
     req.setRawHeader("grpc-accept-encoding","identity");

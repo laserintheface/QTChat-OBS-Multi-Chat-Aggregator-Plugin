@@ -3,6 +3,7 @@
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <QSslSocket>
+#include <QSslConfiguration>
 #include <QUrlQuery>
 #include <obs-module.h>
 #include <algorithm>
@@ -187,7 +188,8 @@ void YouTubeChat::startStream()
     // Google's documented gRPC service. Qt provides HTTP/2 and certificate validation.
     QNetworkRequest request(QUrl("https://youtube.googleapis.com/youtube.api.v3.V3DataLiveChatMessageService/StreamList"));
     request.setAttribute(QNetworkRequest::Http2AllowedAttribute, true);
-    request.setAttribute(QNetworkRequest::Http2DirectAttribute, true);
+    // Negotiate h2 through TLS ALPN instead of sending HTTP/2 without negotiation.
+    request.setAttribute(QNetworkRequest::Http2DirectAttribute, false);
     request.setAttribute(QNetworkRequest::CacheSaveControlAttribute, false);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/grpc");
@@ -199,9 +201,22 @@ void YouTubeChat::startStream()
     m_reply = reply;
     const auto generation = m_generation;
     m_headersTimer.start(30000);
+    connect(reply, &QNetworkReply::encrypted, this, [this, reply, generation] {
+        if (generation != m_generation || !m_active) return;
+        const auto protocol = reply->sslConfiguration().nextNegotiatedProtocol();
+        status(QString("Stream TLS ready; ALPN=%1; backend=%2")
+            .arg(protocol.isEmpty() ? QString("none") : QString::fromLatin1(protocol),
+                 QSslSocket::activeBackend()));
+    });
     connect(reply, &QNetworkReply::metaDataChanged, this, [this, reply, generation] {
         if (generation != m_generation || !m_active) return;
-        if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).isValid()) m_headersTimer.stop();
+        if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).isValid()) {
+            m_headersTimer.stop();
+            status(QString("Stream response: HTTP=%1; HTTP2=%2; type=%3")
+                .arg(reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt())
+                .arg(reply->attribute(QNetworkRequest::Http2WasUsedAttribute).toBool())
+                .arg(reply->header(QNetworkRequest::ContentTypeHeader).toString()));
+        }
     });
     connect(reply, &QNetworkReply::readyRead, this, [this, reply, generation] { consume(reply, generation); });
     connect(reply, &QNetworkReply::finished, this, [this, reply, generation] { finishStream(reply, generation); });
@@ -265,6 +280,12 @@ void YouTubeChat::finishStream(QNetworkReply *reply, quint64 generation)
     const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     bool ok = false;
     const int grpc = reply->rawHeader("grpc-status").toInt(&ok);
+    status(QString("Stream finished: HTTP=%1; HTTP2=%2; gRPC=%3; network=%4 (%5)")
+        .arg(http)
+        .arg(reply->attribute(QNetworkRequest::Http2WasUsedAttribute).toBool())
+        .arg(ok ? QString::number(grpc) : QString("absent"))
+        .arg(int(reply->error()))
+        .arg(reply->errorString()));
     const auto body = reply->readAll();
     if (http == 401 || http == 403 || (ok && (grpc == 3 || grpc == 7 || grpc == 8 || grpc == 9 || grpc == 16))) {
         QString message = http != 200 ? apiFailure(reply, body) :

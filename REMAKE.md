@@ -2,9 +2,17 @@
 
 This source update replaces QTChat's repeating YouTube chat polling with the official `streamList` server stream. It keeps the native OBS dock and direct Twitch/YouTube connections. It is a preview that needs a Windows build and an authenticated live-broadcast test before relying on it for a full stream.
 
+## HTTP/2 negotiation update
+
+The previous Windows log found the broadcast and chat, then failed before receiving messages with an HTTP/2 protocol error. This revision disables forced HTTP/2 direct mode so Qt negotiates the protocol through TLS ALPN. It also logs TLS backend/ALPN, HTTP status, actual HTTP/2 use, gRPC status, and network error. It does not log request headers or chat bodies; status text uses the existing key redaction.
+
+This is a candidate fix, not a confirmed resolution of the Windows error. No credentials were used. This revision could not be compiled locally because CMake and Qt development packages are unavailable. The included GitHub workflow runs tests before building Windows. Earlier validation results below describe the original streaming remake, not a new run of this revision.
+
+After installing, reconnect YouTube and look for `Connected via streamList`. If it fails, copy the new `[YouTubeChat] Stream` diagnostic lines from the OBS log. A reused TLS connection may omit the TLS-ready signal; the response/finished lines still report HTTP/2 use.
+
 ## Build using your existing GitHub fork
 
-1. Extract `QTChat-streaming-update.zip`.
+1. Extract `QTChat-http2-negotiation-update.zip`.
 2. Open https://github.com/laserintheface/QTChat-OBS-Multi-Chat-Aggregator-Plugin and select your main branch.
 3. Choose **Add file → Upload files**. Open the extracted `repository-files` folder and drag **its contents** into the upload area. Include the `.github`, `src`, and `tests` folders and the root files. Upload these at the repository root; do not upload the enclosing `repository-files` folder or the ZIP itself.
 4. Commit the upload. The existing **Push** workflow runs the tests and Windows build. You can also choose **Actions → Push → Run workflow**.
@@ -47,7 +55,7 @@ This version is read-only. It does not send messages, moderate chat, render thir
 
 ## Validation and first live test
 
-All plugin translation units compiled against real Qt 6.4.2 and OBS development headers on Linux. Automated checks cover protobuf fields, fragmented/coalesced frames, Unicode, malformed frames, duplicate filtering, resume tokens, retry limits, stale replies, key redaction, URL validation, Twitch tags, and a real local HTTP/2 stream with quota trailers. An unauthenticated TLS/HTTP2 connection to Google's actual streamList service also succeeded and returned a gRPC permission response, as expected without credentials.
+For the original streaming remake, all plugin translation units compiled against real Qt 6.4.2 and OBS development headers on Linux. Automated checks cover protobuf fields, fragmented/coalesced frames, Unicode, malformed frames, duplicate filtering, resume tokens, retry limits, stale replies, key redaction, URL validation, Twitch tags, and a real local HTTP/2 stream with quota trailers. An unauthenticated TLS/HTTP2 connection to Google's actual streamList service also succeeded and returned a gRPC permission response, as expected without credentials.
 
 Windows linking, DPAPI execution, OBS dock behavior on Windows, and authenticated YouTube streaming have **not** been executed here. The included GitHub workflow compiles Windows after the Linux tests pass. No user credentials were used in testing.
 
