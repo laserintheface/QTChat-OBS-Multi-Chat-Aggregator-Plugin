@@ -132,6 +132,40 @@ private slots:
         QCOMPARE(chat.m_failures,1);
         QCOMPARE(chat.m_retryTimer.interval(),15000);
     }
+    void configurableWaitPreservesSessionAndErrorBackoff() {
+        YouTubeChat chat; chat.m_active = true;
+        chat.setReconnectDelayMs(20000);
+        auto *reply = new FakeReply(200,fixture(),"0");
+        chat.finishStream(reply,chat.m_generation);
+        QCOMPARE(chat.m_retryTimer.interval(),20000);
+        QVERIFY(chat.m_waitingToResume);
+        const auto token=chat.m_pageToken;
+        const auto generation=chat.m_generation;
+        const auto calls=chat.m_streamCalls;
+        chat.setReconnectDelayMs(35000);
+        QCOMPARE(chat.m_retryTimer.interval(),35000);
+        QCOMPARE(chat.m_pageToken,token);
+        QCOMPARE(chat.m_generation,generation);
+        QCOMPARE(chat.m_streamCalls,calls); // No extra request or discovery on Save.
+        chat.retry("Network unavailable");
+        QVERIFY(!chat.m_waitingToResume);
+        QCOMPARE(chat.m_retryTimer.interval(),15000);
+        chat.setReconnectDelayMs(10000);
+        QCOMPARE(chat.m_retryTimer.interval(),15000); // Error backoff is not shortened.
+        chat.disconnect();
+        QVERIFY(!chat.m_retryTimer.isActive());
+        QVERIFY(!chat.m_waitingToResume);
+    }
+    void changingDelayDoesNotInterruptOpenStream() {
+        YouTubeChat chat; chat.m_active = true;
+        auto *reply = new FakeReply(200,{});
+        chat.m_reply = reply;
+        chat.setReconnectDelayMs(35000);
+        QCOMPARE(chat.m_reply.data(),reply);
+        QVERIFY(!chat.m_retryTimer.isActive());
+        QCOMPARE(chat.m_streamCalls,quint64(0));
+        chat.disconnect();
+    }
     void truncatedFrameStillBacksOff() {
         YouTubeChat chat; chat.m_active = true;
         auto *reply = new FakeReply(200,fixture()+fixture().left(7),"0");

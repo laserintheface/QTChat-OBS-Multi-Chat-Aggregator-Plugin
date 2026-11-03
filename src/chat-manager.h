@@ -24,6 +24,7 @@ public:
 	void disconnectYouTube();
 	void reconnectYouTube();
 	void setYouTubeVideo(const QString &video) { m_youtubeVideo = video; }
+	void setYouTubeReconnectDelayMs(int milliseconds) { m_youtubeChat->setReconnectDelayMs(milliseconds); }
 
 	void disconnectAll();
 

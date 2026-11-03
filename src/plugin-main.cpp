@@ -124,6 +124,7 @@ void QTChatPlugin::applySettings()
 		m_chatManager->setYouTubeAPIKey(m_settingsDialog->getYouTubeAPIKey());
 		m_chatManager->setYouTubeChannelId(m_settingsDialog->getYouTubeChannelId());
 		m_chatManager->setYouTubeVideo(m_settingsDialog->getYouTubeVideo());
+		m_chatManager->setYouTubeReconnectDelayMs(m_settingsDialog->getYouTubeReconnectDelayMs());
 		m_chatManager->enablePlatform(RTMPDetector::Platform::Twitch,
 					       m_settingsDialog->isTwitchEnabled());
 		m_chatManager->enablePlatform(RTMPDetector::Platform::YouTube,
@@ -257,7 +258,7 @@ extern "C" {
 bool obs_module_load(void)
 {
 	blog(LOG_INFO, "=================================================");
-	blog(LOG_INFO, "[QTChat] Initializing QTChat Plugin v1.1.0-streaming");
+	blog(LOG_INFO, "[QTChat] Initializing QTChat Plugin v1.1.0-configurable-wait");
 	blog(LOG_INFO, "=================================================");
 
 	try {

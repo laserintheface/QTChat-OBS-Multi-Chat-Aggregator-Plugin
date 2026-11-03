@@ -64,6 +64,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
   ./src/twitch-irc.h
   ./src/twitch-irc.cpp
   ./src/youtube-wire.h
+  ./src/youtube-quota.h
   ./src/youtube-chat.h
   ./src/youtube-chat.cpp
   ./src/rtmp-detector.h

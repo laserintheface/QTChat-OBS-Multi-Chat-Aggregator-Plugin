@@ -10,6 +10,7 @@
 #include <functional>
 #include "chat-message.h"
 #include "youtube-wire.h"
+#include "youtube-quota.h"
 
 class YouTubeChat : public QObject {
     Q_OBJECT
@@ -19,6 +20,7 @@ public:
     ~YouTubeChat();
     void connectToChannel(const QString &apiKey, const QString &channelId, const QString &video = {});
     void disconnect();
+    void setReconnectDelayMs(int milliseconds);
     bool isConnected() const { return m_connected; }
     QString getChannelId() const { return m_channelId; }
     static QString videoId(const QString &input);
@@ -54,5 +56,7 @@ private:
     quint64 m_generation = 0;
     bool m_active = false, m_connected = false, m_receivedBatch = false;
     int m_failures = 0;
+    int m_reconnectDelayMs = YouTubeQuota::DefaultReconnectDelayMs;
+    bool m_waitingToResume = false;
     quint64 m_streamCalls = 0;
 };

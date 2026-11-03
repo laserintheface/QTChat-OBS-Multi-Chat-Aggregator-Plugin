@@ -9,9 +9,12 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
+#include <QDoubleSpinBox>
+#include "youtube-quota.h"
 
 class SettingsDialog : public QDialog {
 	Q_OBJECT
+	friend class SettingsTests;
 
 public:
 	explicit SettingsDialog(QWidget *parent = nullptr);
@@ -25,6 +28,7 @@ public:
 	QString getYouTubeAPIKey() const { return m_youtubeAPIKeyEdit->text(); }
 	QString getYouTubeChannelId() const { return m_youtubeChannelIdEdit->text(); }
 	QString getYouTubeVideo() const { return m_youtubeVideoEdit->text(); }
+	int getYouTubeReconnectDelayMs() const { return qRound(m_youtubeReconnectDelaySpin->value() * 1000.0); }
 	bool isYouTubeEnabled() const { return m_youtubeEnabledCheck->isChecked(); }
 
 signals:
@@ -47,6 +51,7 @@ private:
 	QLineEdit *m_youtubeChannelIdEdit = nullptr;
 	QLineEdit *m_youtubeVideoEdit = nullptr;
 	QCheckBox *m_youtubeEnabledCheck = nullptr;
+	QDoubleSpinBox *m_youtubeReconnectDelaySpin = nullptr;
 
 	QPushButton *m_saveButton = nullptr;
 	QPushButton *m_cancelButton = nullptr;

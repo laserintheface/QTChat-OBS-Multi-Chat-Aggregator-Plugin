@@ -13,6 +13,7 @@ YouTubeChat::YouTubeChat(QObject *parent) : QObject(parent)
     m_retryTimer.setSingleShot(true);
     m_headersTimer.setSingleShot(true);
     connect(&m_retryTimer, &QTimer::timeout, this, [this] {
+        m_waitingToResume = false;
         if (!m_active || m_reply) return;
         if (m_liveChatId.isEmpty()) discover(); else startStream();
     });
@@ -25,6 +26,19 @@ YouTubeChat::YouTubeChat(QObject *parent) : QObject(parent)
     });
 }
 YouTubeChat::~YouTubeChat() { disconnect(); }
+
+void YouTubeChat::setReconnectDelayMs(int milliseconds)
+{
+    const int delay = YouTubeQuota::clampReconnectDelay(milliseconds);
+    if (delay == m_reconnectDelayMs) return;
+    m_reconnectDelayMs = delay;
+    // Changing settings never aborts an open stream or shortens error backoff.
+    if (m_active && m_waitingToResume && m_retryTimer.isActive()) {
+        m_retryTimer.start(m_reconnectDelayMs);
+        status(QString("Resume wait updated to %1 s from now")
+            .arg(m_reconnectDelayMs / 1000.0, 0, 'f', 2));
+    }
+}
 
 QString YouTubeChat::videoId(const QString &input)
 {
@@ -68,6 +82,7 @@ void YouTubeChat::cancelReply()
 }
 void YouTubeChat::disconnect()
 {
+    m_waitingToResume = false;
     ++m_generation;
     m_active = false;
     m_retryTimer.stop();
@@ -300,8 +315,10 @@ void YouTubeChat::finishStream(QNetworkReply *reply, quint64 generation)
         // Google can finish an individual RPC successfully while chat stays live.
         // Resume from the saved token, preserving dedupe state and logical connection.
         m_failures = 0;
-        status("Stream completed successfully; resuming chat in 250 ms");
-        m_retryTimer.start(250); // Bound immediate successful completions without failure backoff.
+        m_waitingToResume = true;
+        status(QString("Stream completed successfully; resuming chat in %1 s")
+            .arg(m_reconnectDelayMs / 1000.0, 0, 'f', 2));
+        m_retryTimer.start(m_reconnectDelayMs);
     } else {
         const QString reason = !m_decoder.empty() ? "Incomplete stream frame" :
             (m_receivedBatch ? "Stream connection closed" : "Stream closed before receiving chat");
@@ -312,6 +329,7 @@ void YouTubeChat::finishStream(QNetworkReply *reply, quint64 generation)
 }
 void YouTubeChat::retry(const QString &reason)
 {
+    m_waitingToResume = false;
     if (!m_active) return;
     if (m_connected) { m_connected = false; emit disconnected(); }
     if (++m_failures > 8) { stopWithError(reason + "; retry limit reached. Use Reconnect YouTube."); return; }
@@ -321,6 +339,7 @@ void YouTubeChat::retry(const QString &reason)
 }
 void YouTubeChat::stopWithError(const QString &message)
 {
+    m_waitingToResume = false;
     ++m_generation;
     m_active = false;
     m_retryTimer.stop();
