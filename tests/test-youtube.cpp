@@ -104,6 +104,42 @@ private slots:
         for (int i=0;i<7;++i) chat.retry("Network unavailable");
         QVERIFY(!chat.m_active); QVERIFY(!chat.m_retryTimer.isActive());
     }
+    void cleanCompletionResumesWithoutFailureBackoff() {
+        YouTubeChat chat; chat.m_active = true;
+        QSignalSpy messages(&chat,&YouTubeChat::messageReceived);
+        QSignalSpy disconnected(&chat,&YouTubeChat::disconnected);
+        chat.m_failures = 7;
+        for (int i=0;i<105;++i) {
+            chat.m_receivedBatch = false;
+            auto *reply = new FakeReply(200,fixture(),"0");
+            chat.finishStream(reply,chat.m_generation);
+            QVERIFY(chat.m_active); QVERIFY(chat.isConnected());
+            QVERIFY(chat.m_retryTimer.isActive());
+            QCOMPARE(chat.m_retryTimer.interval(),250);
+            QCOMPARE(chat.m_failures,0);
+            QCOMPARE(chat.m_pageToken,QString("resume-1"));
+            chat.m_retryTimer.stop();
+        }
+        QCOMPARE(messages.size(),1); // Replayed history is still deduplicated.
+        QCOMPARE(disconnected.size(),0);
+        chat.disconnect();
+        QVERIFY(!chat.m_retryTimer.isActive());
+    }
+    void cleanStatusWithoutDataStillBacksOff() {
+        YouTubeChat chat; chat.m_active = true;
+        auto *reply = new FakeReply(200,{},"0");
+        chat.finishStream(reply,chat.m_generation);
+        QCOMPARE(chat.m_failures,1);
+        QCOMPARE(chat.m_retryTimer.interval(),15000);
+    }
+    void truncatedFrameStillBacksOff() {
+        YouTubeChat chat; chat.m_active = true;
+        auto *reply = new FakeReply(200,fixture()+fixture().left(7),"0");
+        chat.finishStream(reply,chat.m_generation);
+        QCOMPARE(chat.m_failures,1);
+        QCOMPARE(chat.m_retryTimer.interval(),15000);
+        QVERIFY(!chat.isConnected());
+    }
     void grpcQuotaStopsRequests() {
         YouTubeChat chat; chat.m_active = true;
         auto *reply = new FakeReply(200,{},"8");

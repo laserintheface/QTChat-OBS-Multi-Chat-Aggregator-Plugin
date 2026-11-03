@@ -54,5 +54,5 @@ private:
     quint64 m_generation = 0;
     bool m_active = false, m_connected = false, m_receivedBatch = false;
     int m_failures = 0;
-    int m_streamCalls = 0;
+    quint64 m_streamCalls = 0;
 };

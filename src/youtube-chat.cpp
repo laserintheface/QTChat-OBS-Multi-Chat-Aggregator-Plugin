@@ -181,7 +181,7 @@ void YouTubeChat::lookupVideo(const QString &id)
 void YouTubeChat::startStream()
 {
     if (!m_active || m_reply) return;
-    if (++m_streamCalls > 100) { stopWithError("Session connection limit reached; reconnect manually after checking the network."); return; }
+    ++m_streamCalls; // Successful stream renewals are not failed connection attempts.
     m_decoder.clear();
     m_receivedBatch = false;
     status(QString("Connecting via streamList (connection %1)").arg(m_streamCalls));
@@ -285,7 +285,7 @@ void YouTubeChat::finishStream(QNetworkReply *reply, quint64 generation)
         .arg(reply->attribute(QNetworkRequest::Http2WasUsedAttribute).toBool())
         .arg(ok ? QString::number(grpc) : QString("absent"))
         .arg(int(reply->error()))
-        .arg(reply->errorString()));
+        .arg(reply->error() == QNetworkReply::NoError ? QString("none") : reply->errorString()));
     const auto body = reply->readAll();
     if (http == 401 || http == 403 || (ok && (grpc == 3 || grpc == 7 || grpc == 8 || grpc == 9 || grpc == 16))) {
         QString message = http != 200 ? apiFailure(reply, body) :
@@ -295,6 +295,13 @@ void YouTubeChat::finishStream(QNetworkReply *reply, quint64 generation)
         stopWithError("Live chat unavailable or ended. Check the broadcast and reconnect.");
     } else if (http >= 400 && http != 429 && http < 500) {
         stopWithError(apiFailure(reply, body));
+    } else if (http == 200 && ok && grpc == 0 && reply->error() == QNetworkReply::NoError
+               && m_decoder.empty() && m_receivedBatch && !m_pageToken.isEmpty()) {
+        // Google can finish an individual RPC successfully while chat stays live.
+        // Resume from the saved token, preserving dedupe state and logical connection.
+        m_failures = 0;
+        status("Stream completed successfully; resuming chat in 250 ms");
+        m_retryTimer.start(250); // Bound immediate successful completions without failure backoff.
     } else {
         const QString reason = !m_decoder.empty() ? "Incomplete stream frame" :
             (m_receivedBatch ? "Stream connection closed" : "Stream closed before receiving chat");
