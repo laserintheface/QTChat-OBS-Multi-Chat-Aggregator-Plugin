@@ -75,6 +75,7 @@ void YouTubeChat::cancelReply()
     m_headersTimer.stop();
     if (!m_reply) return;
     auto *reply = m_reply.data();
+    diagnose(reply, "cancel");
     m_reply.clear();
     QObject::disconnect(reply, nullptr, this, nullptr);
     reply->abort();
@@ -193,9 +194,45 @@ void YouTubeChat::lookupVideo(const QString &id)
         startStream();
     });
 }
+// Only fixed field names, numeric values and presence flags are logged here.
+// Do not dump headers, URLs, error text, protobuf bodies or credential/token values.
+void YouTubeChat::diagnose(QNetworkReply *reply, const char *event, bool force)
+{
+    if (!reply->property("qtchat-diagnostic").toBool()) return;
+    bool valid = false;
+    const int code = reply->rawHeader("grpc-status").toInt(&valid);
+    valid = valid && code >= 0 && code <= 16;
+    const bool present = reply->hasRawHeader("grpc-status");
+    const QString current = valid ? QString::number(code) :
+        (present ? QString("invalid") : QString("absent"));
+    if (valid) {
+        if (!m_diag.sawStatus) m_diag.firstStatus = code;
+        m_diag.sawStatus = true;
+        m_diag.lastStatus = code;
+    }
+    const bool changed = current != m_diag.previousStatus;
+    m_diag.previousStatus = current;
+    if (!force && !changed) return;
+    const auto line = QString("[YouTubeDiag] build=trailer-diag-1 rpc=%1 event=%2 seq=%3 t_ms=%4 "
+        "http=%5 h2=%6 grpc=%7 seen_grpc=%8 first_grpc=%9 last_grpc=%10 "
+        "metadata=%11 reads=%12 bytes=%13 batches=%14 messages=%15 frame_complete=%16 "
+        "resume_present=%17 network=%18 tls_signal=%19 available=%20 finished=%21")
+        .arg(m_streamCalls).arg(QString::fromLatin1(event)).arg(++m_diag.events)
+        .arg(m_diag.elapsed.isValid() ? m_diag.elapsed.elapsed() : -1)
+        .arg(reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt())
+        .arg(reply->attribute(QNetworkRequest::Http2WasUsedAttribute).toBool())
+        .arg(current).arg(m_diag.sawStatus).arg(m_diag.firstStatus).arg(m_diag.lastStatus)
+        .arg(m_diag.metadata).arg(m_diag.reads).arg(m_diag.bytes).arg(m_diag.batches)
+        .arg(m_diag.messages).arg(m_decoder.empty()).arg(!m_pageToken.isEmpty())
+        .arg(int(reply->error())).arg(m_diag.tlsSignal).arg(reply->bytesAvailable())
+        .arg(reply->isFinished());
+    blog(LOG_INFO, "%s", qPrintable(line));
+}
 void YouTubeChat::startStream()
 {
     if (!m_active || m_reply) return;
+    m_diag = Diagnostics{};
+    m_diag.elapsed.start();
     ++m_streamCalls; // Successful stream renewals are not failed connection attempts.
     m_decoder.clear();
     m_receivedBatch = false;
@@ -214,10 +251,14 @@ void YouTubeChat::startStream()
     request.setTransferTimeout(0); // An idle chat must not create a reconnect loop.
     auto *reply = m_network.post(request, YouTubeWire::request(m_liveChatId, m_pageToken));
     m_reply = reply;
+    reply->setProperty("qtchat-diagnostic", true);
+    diagnose(reply, "start");
     const auto generation = m_generation;
     m_headersTimer.start(30000);
     connect(reply, &QNetworkReply::encrypted, this, [this, reply, generation] {
         if (generation != m_generation || !m_active) return;
+        m_diag.tlsSignal = true;
+        diagnose(reply, "encrypted");
         const auto protocol = reply->sslConfiguration().nextNegotiatedProtocol();
         status(QString("Stream TLS ready; ALPN=%1; backend=%2")
             .arg(protocol.isEmpty() ? QString("none") : QString::fromLatin1(protocol),
@@ -225,6 +266,8 @@ void YouTubeChat::startStream()
     });
     connect(reply, &QNetworkReply::metaDataChanged, this, [this, reply, generation] {
         if (generation != m_generation || !m_active) return;
+        ++m_diag.metadata;
+        diagnose(reply, "metadata");
         if (reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).isValid()) {
             m_headersTimer.stop();
             status(QString("Stream response: HTTP=%1; HTTP2=%2; type=%3")
@@ -233,7 +276,17 @@ void YouTubeChat::startStream()
                 .arg(reply->header(QNetworkRequest::ContentTypeHeader).toString()));
         }
     });
-    connect(reply, &QNetworkReply::readyRead, this, [this, reply, generation] { consume(reply, generation); });
+    connect(reply, &QNetworkReply::readyRead, this, [this, reply, generation] {
+        if (generation != m_generation || !m_active) return;
+        ++m_diag.reads;
+        diagnose(reply, "readyRead", m_diag.reads == 1);
+        consume(reply, generation);
+    });
+    connect(reply, &QNetworkReply::errorOccurred, this,
+        [this, reply, generation](QNetworkReply::NetworkError) {
+            if (generation != m_generation || !m_active) return;
+            diagnose(reply, "network-error");
+        });
     connect(reply, &QNetworkReply::finished, this, [this, reply, generation] { finishStream(reply, generation); });
 }
 void YouTubeChat::consume(QNetworkReply *reply, quint64 generation)
@@ -247,10 +300,15 @@ void YouTubeChat::consume(QNetworkReply *reply, quint64 generation)
     }
     while (reply->bytesAvailable() > 0 && m_active) {
         QVector<YouTubeWire::Batch> batches;
-        if (!m_decoder.feed(reply->read(65536), batches)) {
+        const auto chunk = reply->read(65536);
+        m_diag.bytes += chunk.size();
+        if (!m_decoder.feed(chunk, batches)) {
+            diagnose(reply, "decode-error");
             stopWithError("Invalid or oversized stream frame; reconnect stopped"); return;
         }
         for (const auto &batch : batches) {
+            ++m_diag.batches;
+            m_diag.messages += quint64(batch.messages.size());
             handleBatch(batch);
             if (!m_active) return;
         }
@@ -288,8 +346,10 @@ void YouTubeChat::handleBatch(const YouTubeWire::Batch &batch)
 void YouTubeChat::finishStream(QNetworkReply *reply, quint64 generation)
 {
     if (generation != m_generation || !m_active) { reply->deleteLater(); return; }
+    diagnose(reply, "finished-before-read");
     consume(reply, generation);
     if (generation != m_generation || !m_active) return;
+    diagnose(reply, "finished-after-read");
     m_headersTimer.stop();
     m_reply.clear();
     const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();

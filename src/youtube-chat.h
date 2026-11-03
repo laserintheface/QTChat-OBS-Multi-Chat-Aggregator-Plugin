@@ -1,6 +1,7 @@
 #pragma once
 #include <QObject>
 #include <QTimer>
+#include <QElapsedTimer>
 #include <QPointer>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -32,6 +33,7 @@ signals:
     void errorOccurred(const QString &message);
     void statusChanged(const QString &status);
 private:
+    void diagnose(QNetworkReply *reply, const char *event, bool force = true);
     void discover();
     void lookupVideo(const QString &id);
     void startStream();
@@ -59,4 +61,14 @@ private:
     int m_reconnectDelayMs = YouTubeQuota::DefaultReconnectDelayMs;
     bool m_waitingToResume = false;
     quint64 m_streamCalls = 0;
+    // Per-RPC observations only. Never used to decide success or retry timing.
+    struct Diagnostics {
+        QElapsedTimer elapsed;
+        qint64 bytes = 0;
+        quint64 batches = 0, messages = 0, reads = 0, metadata = 0, events = 0;
+        bool tlsSignal = false;
+        bool sawStatus = false;
+        int firstStatus = -1, lastStatus = -1;
+        QString previousStatus;
+    } m_diag;
 };

@@ -7,6 +7,7 @@
 #include "youtube-chat.h"
 
 using namespace YouTubeWire;
+extern QStringList diagnosticLog;
 // Handwritten fixture from Google's published protobuf field numbers, not the
 // production encoder. Includes Unicode and fields outside our read-only subset.
 static QByteArray fixture() {
@@ -25,6 +26,7 @@ public:
         if (!grpc.isEmpty()) setRawHeader("grpc-status",grpc);
         open(QIODevice::ReadOnly);
     }
+    void header(const QByteArray &name, const QByteArray &value) { setRawHeader(name, value); }
     void abort() override {}
     qint64 bytesAvailable() const override { return body.size() + QNetworkReply::bytesAvailable(); }
 protected:
@@ -39,6 +41,45 @@ private:
 class YouTubeTests : public QObject {
     Q_OBJECT
 private slots:
+    void diagnosticTracksStatusWithoutChangingRetryRules() {
+        diagnosticLog.clear();
+        YouTubeChat chat; chat.m_active = true;
+        chat.m_diag.elapsed.start();
+        FakeReply earlier(200, {}, "0");
+        earlier.setProperty("qtchat-diagnostic", true);
+        chat.diagnose(&earlier, "metadata");
+        QVERIFY(chat.m_diag.sawStatus);
+        QCOMPARE(chat.m_diag.firstStatus, 0);
+        // Model metadata no longer exposing the previously observed status.
+        auto *reply = new FakeReply(200, fixture());
+        reply->setProperty("qtchat-diagnostic", true);
+        reply->header("authorization", "secret-header-value");
+        chat.m_apiKey = "secret-api-key";
+        chat.finishStream(reply, chat.m_generation);
+        QCOMPARE(chat.m_failures, 1);
+        QCOMPARE(chat.m_retryTimer.interval(), 15000);
+        QCOMPARE(chat.m_diag.batches, quint64(1));
+        QCOMPARE(chat.m_diag.messages, quint64(1));
+        QCOMPARE(chat.m_diag.bytes, qint64(fixture().size()));
+        const auto log = diagnosticLog.join('\n');
+        QVERIFY(log.contains("event=finished-after-read"));
+        QVERIFY(log.contains("grpc=absent seen_grpc=1 first_grpc=0 last_grpc=0"));
+        QVERIFY(log.contains("frame_complete=1 resume_present=1"));
+        for (const auto &secret : {"secret-header-value", "secret-api-key", "resume-1", "message-1", "Nolan", "hello"})
+            QVERIFY(!log.contains(QString::fromUtf8(secret)));
+    }
+    void diagnosticInvalidStatusAndPartialFrame() {
+        diagnosticLog.clear();
+        YouTubeChat chat; chat.m_active = true;
+        auto *reply = new FakeReply(200, fixture().left(7), "sensitive-invalid-value");
+        reply->setProperty("qtchat-diagnostic", true);
+        chat.finishStream(reply, chat.m_generation);
+        const auto log = diagnosticLog.join('\n');
+        QVERIFY(log.contains("grpc=invalid seen_grpc=0"));
+        QVERIFY(log.contains("frame_complete=0"));
+        QVERIFY(!log.contains("sensitive-invalid-value"));
+        QCOMPARE(chat.m_retryTimer.interval(), 15000);
+    }
     void twitchTaggedMessage() {
         TwitchIRC twitch;
         const auto msg=twitch.parsePrivmsg("@badges=moderator/1;color=#12AB34;emotes=25:0-4;id=abc;mod=1;subscriber=1 :nolan!nolan@nolan.tmi.twitch.tv PRIVMSG #channel :Kappa hello");
@@ -228,6 +269,12 @@ private slots:
         request.setAttribute(QNetworkRequest::CacheSaveControlAttribute,false);
         auto *reply=chat.m_network.post(request,YouTubeWire::request("test",{}));
         chat.m_reply=reply;
+        chat.m_diag.elapsed.start();
+        reply->setProperty("qtchat-diagnostic", true);
+        connect(reply,&QNetworkReply::metaDataChanged,&chat,[&]{
+            ++chat.m_diag.metadata;
+            chat.diagnose(reply,"metadata");
+        });
         const auto generation=chat.m_generation;
         connect(reply,&QNetworkReply::readyRead,&chat,[&]{chat.consume(reply,generation);});
         connect(reply,&QNetworkReply::finished,&chat,[&]{chat.finishStream(reply,generation);});
@@ -235,6 +282,9 @@ private slots:
         QCOMPARE(messages.size(),1);
         QVERIFY(!chat.m_retryTimer.isActive());
         QCOMPARE(chat.m_pageToken,QString("resume-1"));
+        QVERIFY(chat.m_diag.sawStatus);
+        QCOMPARE(chat.m_diag.lastStatus,8); // Real HTTP/2 trailer observed.
+        QCOMPARE(chat.m_diag.batches,quint64(1));
     }
     void staleReplyDoesNotReconnect() {
         YouTubeChat chat; chat.m_active = true;
