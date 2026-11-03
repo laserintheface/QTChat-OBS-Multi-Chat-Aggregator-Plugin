@@ -8,7 +8,7 @@ This policy describes the QTChat OBS plugin fork maintained by **laserintheface*
 
 QTChat runs on the user's computer. This fork was developed for the maintainer's own streaming setup. Other people who choose to use it must install the plugin and complete their own service setup, including creating or configuring their own Google Cloud project, enabling the YouTube Data API, and supplying their own API key. This distribution does not supply the maintainer's API key, a shared quota allowance, a hosted chat service, or a QTChat user account. Google controls API availability, quotas, and any approval for quota increases.
 
-**Privacy contact: [REPLACE WITH A PUBLIC CONTACT EMAIL OR WORKING SUPPORT URL BEFORE PUBLISHING]**
+Privacy contact: lazerintheface@gmail.com
 
 ## Information accessed and its purpose
 
