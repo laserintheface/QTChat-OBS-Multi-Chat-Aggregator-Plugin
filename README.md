@@ -1,11 +1,9 @@
-# QTChat - OBS Multi-Chat Aggregator Plugin
+QTChat is an OBS Studio plugin that combines Twitch and YouTube livestream chat in one dock. Runs locally; users supply their own YouTube Data API key.
 
-QTChat is an OBS Studio plugin that aggregates Twitch and YouTube chat into a single dockable window, with automatic detection of multiple RTMP streaming endpoints.
+## About this fork
 
-## Features
+QTChat combines Twitch and YouTube livestream messages in an OBS Studio chat dock. It runs locally and uses YouTube API Services.
 
-- **Multi-Platform Support**: Connect to Twitch and YouTube chat simultaneously
-- **Auto-Detection**: Automatically detects which platforms you're streaming to
-- **Dockable Window**: Fully dockable chat window in OBS
-- **Combined View**: See all chats in one unified view, or separate tabs per platform
-- **Easy Setup**: Simple settings dialog for OAuth configuration
+Each user must configure their own Google Cloud project, enable the YouTube Data API, and supply their own API key. API requests use that project’s quota; this fork does not provide a shared key or quota allowance.
+
+[Privacy Policy](PRIVACY.md) · [YouTube Terms of Service](https://www.youtube.com/t/terms) · [Google Privacy Policy](https://policies.google.com/privacy)
