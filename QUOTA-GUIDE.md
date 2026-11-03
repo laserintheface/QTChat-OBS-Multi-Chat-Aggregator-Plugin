@@ -2,7 +2,7 @@
 
 Verified against Google's documentation on November 3, 2026.
 
-## Default quota: 10,000, not 15,000
+## Default quota: 10,000
 
 Google currently publishes a default allocation of **10,000 units per project per day** for the shared bucket containing live-chat methods. `search.list` has its own default allowance of 100 calls/day, separate from that shared bucket. `videos.insert` also has its own bucket and is not used by this plugin.
 
