@@ -80,6 +80,52 @@ private slots:
         QVERIFY(!log.contains("sensitive-invalid-value"));
         QCOMPARE(chat.m_retryTimer.interval(), 15000);
     }
+    void duplicateStatusResumes() {
+        for (const auto &value : {"0", "0, 0", "0,0,0", " 0 ,\t0 "}) {
+            YouTubeChat chat; chat.m_active = true;
+            chat.setReconnectDelayMs(10250);
+            auto *reply = new FakeReply(200, fixture(), value);
+            reply->setProperty("qtchat-diagnostic", true);
+            chat.finishStream(reply, chat.m_generation);
+            QVERIFY(chat.m_waitingToResume);
+            QCOMPARE(chat.m_failures, 0);
+            QCOMPARE(chat.m_retryTimer.interval(), 10250);
+        }
+    }
+    void laterErrorOverridesEarlierSuccess() {
+        for (const auto &value : {"8", "0, 8", "0,broken,8"}) {
+            YouTubeChat chat; chat.m_active = true;
+            auto *reply = new FakeReply(200, fixture(), "0");
+            chat.observeGrpcStatus(reply);
+            reply->header("grpc-status", value);
+            chat.finishStream(reply, chat.m_generation);
+            QVERIFY(!chat.m_active);
+            QVERIFY(!chat.m_retryTimer.isActive());
+        }
+    }
+    void earlierErrorCannotBecomeSuccess() {
+        for (const auto &value : {"8", "14"}) {
+            YouTubeChat chat; chat.m_active = true;
+            auto *reply = new FakeReply(200, fixture(), value);
+            chat.observeGrpcStatus(reply);
+            reply->header("grpc-status", "0,0");
+            chat.finishStream(reply, chat.m_generation);
+            QVERIFY(!chat.m_waitingToResume);
+            if (QByteArray(value) == "8") QVERIFY(!chat.m_active);
+            else QCOMPARE(chat.m_retryTimer.interval(),15000);
+        }
+    }
+    void malformedFinalNeverUsesEarlierSuccess() {
+        for (const auto &value : {"", "0,", "0,garbage", "+0", "17", "0, 17"}) {
+            YouTubeChat chat; chat.m_active = true;
+            auto *reply = new FakeReply(200, fixture(), "0");
+            chat.observeGrpcStatus(reply);
+            reply->header("grpc-status", value);
+            chat.finishStream(reply, chat.m_generation);
+            QVERIFY(!chat.m_waitingToResume);
+            QCOMPARE(chat.m_retryTimer.interval(),15000);
+        }
+    }
     void twitchTaggedMessage() {
         TwitchIRC twitch;
         const auto msg=twitch.parsePrivmsg("@badges=moderator/1;color=#12AB34;emotes=25:0-4;id=abc;mod=1;subscriber=1 :nolan!nolan@nolan.tmi.twitch.tv PRIVMSG #channel :Kappa hello");
@@ -221,7 +267,20 @@ private slots:
         chat.finishStream(reply,chat.m_generation);
         QVERIFY(!chat.m_active); QVERIFY(!chat.m_retryTimer.isActive());
     }
+    void http2StreamingAndTrailers_data() {
+        QTest::addColumn<QByteArray>("initialStatus");
+        QTest::addColumn<QByteArray>("trailerStatus");
+        QTest::addColumn<int>("outcome"); // 0 resume, 1 backoff, 2 stop
+        QTest::newRow("quota") << QByteArray() << QByteArray("8") << 2;
+        QTest::newRow("combined-success") << QByteArray() << QByteArray("0, 0") << 0;
+        QTest::newRow("repeated-header-success") << QByteArray("0") << QByteArray("0") << 0;
+        QTest::newRow("later-quota") << QByteArray("0") << QByteArray("8") << 2;
+        QTest::newRow("malformed") << QByteArray() << QByteArray("0,broken") << 1;
+    }
     void http2StreamingAndTrailers() {
+        QFETCH(QByteArray, initialStatus);
+        QFETCH(QByteArray, trailerStatus);
+        QFETCH(int, outcome);
         // A real local HTTP/2 connection: one DATA batch, then quota trailers.
         QTcpServer server;
         QVERIFY(server.listen(QHostAddress::LocalHost));
@@ -255,9 +314,11 @@ private slots:
                     buffer->remove(0,size+9);
                     if(type==4 && !(flags&1)) socket->write(packet(4,1,0,{}));
                     if(type==0 && (flags&1)) {
-                        socket->write(packet(1,4,stream,QByteArray(1,char(0x88))+header("content-type","application/grpc")));
+                        auto initial = QByteArray(1,char(0x88))+header("content-type","application/grpc");
+                        if (!initialStatus.isEmpty()) initial += header("grpc-status",initialStatus);
+                        socket->write(packet(1,4,stream,initial));
                         socket->write(packet(0,0,stream,fixture()));
-                        socket->write(packet(1,5,stream,header("grpc-status","8")));
+                        socket->write(packet(1,5,stream,header("grpc-status",trailerStatus)));
                     }
                 }
             });
@@ -278,13 +339,20 @@ private slots:
         const auto generation=chat.m_generation;
         connect(reply,&QNetworkReply::readyRead,&chat,[&]{chat.consume(reply,generation);});
         connect(reply,&QNetworkReply::finished,&chat,[&]{chat.finishStream(reply,generation);});
-        QTRY_VERIFY_WITH_TIMEOUT(!chat.m_active,5000);
+        QSignalSpy finished(reply,&QNetworkReply::finished);
+        QTRY_VERIFY_WITH_TIMEOUT(finished.size()>0,5000);
         QCOMPARE(messages.size(),1);
-        QVERIFY(!chat.m_retryTimer.isActive());
         QCOMPARE(chat.m_pageToken,QString("resume-1"));
-        QVERIFY(chat.m_diag.sawStatus);
-        QCOMPARE(chat.m_diag.lastStatus,8); // Real HTTP/2 trailer observed.
         QCOMPARE(chat.m_diag.batches,quint64(1));
+        if (outcome==0) {
+            QVERIFY(chat.m_active); QVERIFY(chat.m_waitingToResume);
+            QCOMPARE(chat.m_retryTimer.interval(),250);
+        } else if (outcome==1) {
+            QVERIFY(chat.m_active); QVERIFY(!chat.m_waitingToResume);
+            QCOMPARE(chat.m_retryTimer.interval(),15000);
+        } else {
+            QVERIFY(!chat.m_active); QVERIFY(!chat.m_retryTimer.isActive());
+        }
     }
     void staleReplyDoesNotReconnect() {
         YouTubeChat chat; chat.m_active = true;

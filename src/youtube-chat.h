@@ -12,6 +12,7 @@
 #include "chat-message.h"
 #include "youtube-wire.h"
 #include "youtube-quota.h"
+#include "youtube-status.h"
 
 class YouTubeChat : public QObject {
     Q_OBJECT
@@ -33,6 +34,7 @@ signals:
     void errorOccurred(const QString &message);
     void statusChanged(const QString &status);
 private:
+    YouTubeStatus::Parsed observeGrpcStatus(QNetworkReply *reply);
     void diagnose(QNetworkReply *reply, const char *event, bool force = true);
     void discover();
     void lookupVideo(const QString &id);
@@ -61,6 +63,7 @@ private:
     int m_reconnectDelayMs = YouTubeQuota::DefaultReconnectDelayMs;
     bool m_waitingToResume = false;
     quint64 m_streamCalls = 0;
+    int m_streamGrpcError = -1; // A nonzero status cannot be erased by later metadata.
     // Per-RPC observations only. Never used to decide success or retry timing.
     struct Diagnostics {
         QElapsedTimer elapsed;

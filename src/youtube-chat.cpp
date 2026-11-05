@@ -194,17 +194,35 @@ void YouTubeChat::lookupVideo(const QString &id)
         startStream();
     });
 }
+YouTubeStatus::Parsed YouTubeChat::observeGrpcStatus(QNetworkReply *reply)
+{
+    QByteArray values;
+    bool present = false;
+    for (const auto &header : reply->rawHeaderPairs()) {
+        if (header.first.compare("grpc-status", Qt::CaseInsensitive) != 0) continue;
+        if (present) values += ',';
+        present = true;
+        values += header.second;
+        if (values.size() > 1024) break;
+    }
+    const auto parsed = YouTubeStatus::parse(
+        std::string_view(values.constData(), size_t(values.size())), present);
+    if (parsed.error >= 0 &&
+        (m_streamGrpcError < 0 || YouTubeStatus::terminal(parsed.error)))
+        m_streamGrpcError = parsed.error;
+    return parsed;
+}
 // Only fixed field names, numeric values and presence flags are logged here.
 // Do not dump headers, URLs, error text, protobuf bodies or credential/token values.
 void YouTubeChat::diagnose(QNetworkReply *reply, const char *event, bool force)
 {
+    const auto parsed = observeGrpcStatus(reply);
     if (!reply->property("qtchat-diagnostic").toBool()) return;
-    bool valid = false;
-    const int code = reply->rawHeader("grpc-status").toInt(&valid);
-    valid = valid && code >= 0 && code <= 16;
-    const bool present = reply->hasRawHeader("grpc-status");
+    const bool valid = parsed.valid;
+    const int code = parsed.code;
     const QString current = valid ? QString::number(code) :
-        (present ? QString("invalid") : QString("absent"));
+        (parsed.conflict ? QString("conflict") :
+            (parsed.present ? QString("invalid") : QString("absent")));
     if (valid) {
         if (!m_diag.sawStatus) m_diag.firstStatus = code;
         m_diag.sawStatus = true;
@@ -213,7 +231,7 @@ void YouTubeChat::diagnose(QNetworkReply *reply, const char *event, bool force)
     const bool changed = current != m_diag.previousStatus;
     m_diag.previousStatus = current;
     if (!force && !changed) return;
-    const auto line = QString("[YouTubeDiag] build=trailer-diag-1 rpc=%1 event=%2 seq=%3 t_ms=%4 "
+    const auto line = QString("[YouTubeDiag] build=trailer-status-fix-1 rpc=%1 event=%2 seq=%3 t_ms=%4 "
         "http=%5 h2=%6 grpc=%7 seen_grpc=%8 first_grpc=%9 last_grpc=%10 "
         "metadata=%11 reads=%12 bytes=%13 batches=%14 messages=%15 frame_complete=%16 "
         "resume_present=%17 network=%18 tls_signal=%19 available=%20 finished=%21")
@@ -226,11 +244,13 @@ void YouTubeChat::diagnose(QNetworkReply *reply, const char *event, bool force)
         .arg(m_diag.messages).arg(m_decoder.empty()).arg(!m_pageToken.isEmpty())
         .arg(int(reply->error())).arg(m_diag.tlsSignal).arg(reply->bytesAvailable())
         .arg(reply->isFinished());
-    blog(LOG_INFO, "%s", qPrintable(line));
+    blog(LOG_INFO, "%s", qPrintable(line + QString(" status_values=%1 status_conflict=%2 observed_error=%3")
+        .arg(parsed.values).arg(parsed.conflict).arg(m_streamGrpcError)));
 }
 void YouTubeChat::startStream()
 {
     if (!m_active || m_reply) return;
+    m_streamGrpcError = -1;
     m_diag = Diagnostics{};
     m_diag.elapsed.start();
     ++m_streamCalls; // Successful stream renewals are not failed connection attempts.
@@ -353,8 +373,11 @@ void YouTubeChat::finishStream(QNetworkReply *reply, quint64 generation)
     m_headersTimer.stop();
     m_reply.clear();
     const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    bool ok = false;
-    const int grpc = reply->rawHeader("grpc-status").toInt(&ok);
+    const auto parsed = observeGrpcStatus(reply);
+    // An observed error always overrides success; missing/malformed final status
+    // never becomes success merely because a previous observation contained 0.
+    const bool ok = m_streamGrpcError >= 0 || parsed.valid;
+    const int grpc = m_streamGrpcError >= 0 ? m_streamGrpcError : parsed.code;
     status(QString("Stream finished: HTTP=%1; HTTP2=%2; gRPC=%3; network=%4 (%5)")
         .arg(http)
         .arg(reply->attribute(QNetworkRequest::Http2WasUsedAttribute).toBool())
