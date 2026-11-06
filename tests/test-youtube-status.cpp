@@ -18,6 +18,9 @@ int main() {
     assert(!conflict.valid && conflict.conflict && conflict.error==8);
     auto invalid=parse("0,garbage,8",true);
     assert(!invalid.valid && invalid.error==8);
+    assert(parse("8,5",true).error==8);
+    assert(parse("5,8",true).error==8);
+    assert(parse("16,5",true).error==16);
     assert(!parse(std::string(1025,'0'),true).valid);
     std::string many="0"; for(int i=0;i<64;++i) many+=",0";
     assert(!parse(many,true).valid);

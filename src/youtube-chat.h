@@ -38,6 +38,8 @@ private:
     void diagnose(QNetworkReply *reply, const char *event, bool force = true);
     void discover();
     void lookupVideo(const QString &id);
+    bool acceptLiveChatId(const QString &id);
+    void recoverNotFound();
     void startStream();
     void consume(QNetworkReply *reply, quint64 generation);
     void finishStream(QNetworkReply *reply, quint64 generation);
@@ -60,6 +62,10 @@ private:
     quint64 m_generation = 0;
     bool m_active = false, m_connected = false, m_receivedBatch = false;
     int m_failures = 0;
+    static constexpr int MaxNotFoundRecoveries = 2;
+    int m_notFoundRecoveries = 0;
+    bool m_refreshingChat = false;
+    QString m_resolvedVideoId, m_recoveryPreviousChatId;
     int m_reconnectDelayMs = YouTubeQuota::DefaultReconnectDelayMs;
     bool m_waitingToResume = false;
     quint64 m_streamCalls = 0;

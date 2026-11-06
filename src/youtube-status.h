@@ -5,6 +5,10 @@ namespace YouTubeStatus {
 inline bool terminal(int code) {
     return code == 3 || code == 5 || code == 7 || code == 8 || code == 9 || code == 16;
 }
+inline int errorPriority(int code) {
+    // NOT_FOUND may be refreshed, but must never erase quota/auth stop codes.
+    return terminal(code) && code != 5 ? 3 : (code == 5 ? 2 : (code > 0 ? 1 : 0));
+}
 struct Parsed {
     bool present = false, valid = false, conflict = false;
     int code = -1, error = -1, values = 0;
@@ -33,7 +37,7 @@ inline Parsed parse(std::string_view raw, bool present) {
         else {
             if (out.code < 0) out.code = code;
             else if (out.code != code) out.conflict = true;
-            if (code != 0 && (out.error < 0 || terminal(code))) out.error = code;
+            if (code != 0 && (out.error < 0 || errorPriority(code) > errorPriority(out.error))) out.error = code;
         }
         if (comma == std::string_view::npos) break;
         raw.remove_prefix(comma + 1);

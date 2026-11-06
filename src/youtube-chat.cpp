@@ -15,7 +15,8 @@ YouTubeChat::YouTubeChat(QObject *parent) : QObject(parent)
     connect(&m_retryTimer, &QTimer::timeout, this, [this] {
         m_waitingToResume = false;
         if (!m_active || m_reply) return;
-        if (m_liveChatId.isEmpty()) discover(); else startStream();
+        if (m_refreshingChat) lookupVideo(m_resolvedVideoId);
+        else if (m_liveChatId.isEmpty()) discover(); else startStream();
     });
     // Only bound connection establishment, not quiet periods in chat.
     connect(&m_headersTimer, &QTimer::timeout, this, [this] {
@@ -83,6 +84,8 @@ void YouTubeChat::cancelReply()
 }
 void YouTubeChat::disconnect()
 {
+    m_refreshingChat = false;
+    m_recoveryPreviousChatId.clear();
     m_waitingToResume = false;
     ++m_generation;
     m_active = false;
@@ -103,6 +106,8 @@ void YouTubeChat::connectToChannel(const QString &key, const QString &channel, c
     m_apiKey = k; m_channelId = c; m_video = v;
     m_liveChatId.clear(); m_pageToken.clear(); m_seen.clear(); m_seenOrder.clear();
     m_failures = 0; m_streamCalls = 0; m_receivedBatch = false;
+    m_notFoundRecoveries = 0;
+    m_resolvedVideoId.clear();
     if (k.isEmpty()) { status("Enter a YouTube API key in Settings"); return; }
     if (!v.isEmpty() && videoId(v).isEmpty()) { status("Invalid YouTube video URL or ID"); return; }
     if (v.isEmpty() && !QRegularExpression("^UC[A-Za-z0-9_-]{22}$").match(c).hasMatch()) {
@@ -179,6 +184,8 @@ void YouTubeChat::discover()
 }
 void YouTubeChat::lookupVideo(const QString &id)
 {
+    // Revalidate this broadcast during recovery, without spending search quota.
+    m_resolvedVideoId = id;
     status("Finding the broadcast's live chat");
     QUrl url("https://www.googleapis.com/youtube/v3/videos");
     QUrlQuery query;
@@ -186,14 +193,48 @@ void YouTubeChat::lookupVideo(const QString &id)
     readJson(get(url), m_generation, [this](const QJsonObject &root) {
         const auto items = root.value("items").toArray();
         if (items.isEmpty()) { stopWithError("Video unavailable. Check the video URL and visibility."); return; }
-        m_liveChatId = items.first().toObject().value("liveStreamingDetails").toObject().value("activeLiveChatId").toString();
-        if (m_liveChatId.isEmpty()) {
-            stopWithError("No active chat for this broadcast. Enable chat and go live, then reconnect.");
-            return;
-        }
-        startStream();
+        const auto chatId = items.first().toObject().value("liveStreamingDetails").toObject().value("activeLiveChatId").toString();
+        if (acceptLiveChatId(chatId)) startStream();
     });
 }
+bool YouTubeChat::acceptLiveChatId(const QString &id)
+{
+    if (id.isEmpty()) {
+        stopWithError("No active chat for this broadcast. Enable chat and go live, then reconnect.");
+        return false;
+    }
+    if (m_refreshingChat && id != m_recoveryPreviousChatId) {
+        m_seen.clear();
+        m_seenOrder.clear();
+    }
+    m_liveChatId = id;
+    m_refreshingChat = false;
+    m_recoveryPreviousChatId.clear();
+    return true;
+}
+void YouTubeChat::recoverNotFound()
+{
+    // A bounded per-session refresh, not indefinite polling for a new broadcast.
+    if (m_resolvedVideoId.isEmpty() || m_notFoundRecoveries >= MaxNotFoundRecoveries) {
+        stopWithError("Live chat unavailable; automatic refresh limit reached or no broadcast to refresh. Use Reconnect YouTube.");
+        return;
+    }
+    ++m_notFoundRecoveries;
+    ++m_generation; // Ignore any queued callbacks from the completed request.
+    m_waitingToResume = false;
+    m_refreshingChat = true;
+    m_recoveryPreviousChatId = m_liveChatId;
+    m_liveChatId.clear();
+    m_pageToken.clear();
+    m_decoder.clear();
+    m_receivedBatch = false;
+    if (m_connected) { m_connected = false; emit disconnected(); }
+    const int delay = std::max(m_reconnectDelayMs, 15000 * m_notFoundRecoveries);
+    status(QString("Live chat not found; refreshing current broadcast chat in %1 s (recovery %2/%3)")
+        .arg(delay / 1000.0, 0, 'f', 2).arg(m_notFoundRecoveries).arg(MaxNotFoundRecoveries));
+    m_retryTimer.start(delay);
+}
+
 YouTubeStatus::Parsed YouTubeChat::observeGrpcStatus(QNetworkReply *reply)
 {
     QByteArray values;
@@ -208,7 +249,7 @@ YouTubeStatus::Parsed YouTubeChat::observeGrpcStatus(QNetworkReply *reply)
     const auto parsed = YouTubeStatus::parse(
         std::string_view(values.constData(), size_t(values.size())), present);
     if (parsed.error >= 0 &&
-        (m_streamGrpcError < 0 || YouTubeStatus::terminal(parsed.error)))
+        (m_streamGrpcError < 0 || YouTubeStatus::errorPriority(parsed.error) > YouTubeStatus::errorPriority(m_streamGrpcError)))
         m_streamGrpcError = parsed.error;
     return parsed;
 }
@@ -231,7 +272,7 @@ void YouTubeChat::diagnose(QNetworkReply *reply, const char *event, bool force)
     const bool changed = current != m_diag.previousStatus;
     m_diag.previousStatus = current;
     if (!force && !changed) return;
-    const auto line = QString("[YouTubeDiag] build=trailer-status-fix-1 rpc=%1 event=%2 seq=%3 t_ms=%4 "
+    const auto line = QString("[YouTubeDiag] build=not-found-recovery-1 rpc=%1 event=%2 seq=%3 t_ms=%4 "
         "http=%5 h2=%6 grpc=%7 seen_grpc=%8 first_grpc=%9 last_grpc=%10 "
         "metadata=%11 reads=%12 bytes=%13 batches=%14 messages=%15 frame_complete=%16 "
         "resume_present=%17 network=%18 tls_signal=%19 available=%20 finished=%21")
@@ -390,7 +431,7 @@ void YouTubeChat::finishStream(QNetworkReply *reply, quint64 generation)
             QString("YouTube rejected streamList (gRPC %1). Check quota, API key and broadcast status; automatic retries stopped.").arg(grpc);
         stopWithError(message);
     } else if (http == 404 || (ok && grpc == 5)) {
-        stopWithError("Live chat unavailable or ended. Check the broadcast and reconnect.");
+        recoverNotFound();
     } else if (http >= 400 && http != 429 && http < 500) {
         stopWithError(apiFailure(reply, body));
     } else if (http == 200 && ok && grpc == 0 && reply->error() == QNetworkReply::NoError
@@ -422,6 +463,8 @@ void YouTubeChat::retry(const QString &reason)
 }
 void YouTubeChat::stopWithError(const QString &message)
 {
+    m_refreshingChat = false;
+    m_recoveryPreviousChatId.clear();
     m_waitingToResume = false;
     ++m_generation;
     m_active = false;

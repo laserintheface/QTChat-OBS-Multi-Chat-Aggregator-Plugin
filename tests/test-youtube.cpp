@@ -80,6 +80,110 @@ private slots:
         QVERIFY(!log.contains("sensitive-invalid-value"));
         QCOMPARE(chat.m_retryTimer.interval(), 15000);
     }
+    void notFoundRefreshesWithoutTokenAndKeepsDedupe() {
+        YouTubeChat chat; chat.m_active=true; chat.m_connected=true;
+        chat.m_resolvedVideoId="abcdefghijk";
+        chat.m_liveChatId="same-chat"; chat.m_pageToken="old-token";
+        chat.m_seen.insert("old-message"); chat.m_seenOrder.enqueue("old-message");
+        QSignalSpy disconnected(&chat,&YouTubeChat::disconnected);
+        auto *reply=new FakeReply(200,{},"5, 5");
+        chat.finishStream(reply,chat.m_generation);
+        QVERIFY(chat.m_active); QVERIFY(!chat.isConnected());
+        QCOMPARE(disconnected.size(),1);
+        QVERIFY(chat.m_refreshingChat); QVERIFY(!chat.m_waitingToResume);
+        QCOMPARE(chat.m_notFoundRecoveries,1);
+        QCOMPARE(chat.m_retryTimer.interval(),15000);
+        QVERIFY(chat.m_pageToken.isEmpty()); QVERIFY(chat.m_liveChatId.isEmpty());
+        QCOMPARE(chat.m_resolvedVideoId,QString("abcdefghijk"));
+        QVERIFY(chat.acceptLiveChatId("same-chat"));
+        QVERIFY(!chat.m_refreshingChat);
+        QVERIFY(chat.m_seen.contains("old-message"));
+        QVERIFY(chat.m_pageToken.isEmpty());
+    }
+    void notFoundBudgetIsBoundedAcrossSuccessfulResumes() {
+        YouTubeChat chat; chat.m_active=true;
+        chat.m_resolvedVideoId="abcdefghijk";
+        chat.m_liveChatId="chat";
+        for(int i=1;i<=2;++i) {
+            chat.m_streamGrpcError=-1; // startStream resets this for each RPC.
+            chat.finishStream(new FakeReply(200,{},"5"),chat.m_generation);
+            QVERIFY(chat.m_active); QCOMPARE(chat.m_notFoundRecoveries,i);
+            QCOMPARE(chat.m_retryTimer.interval(),15000*i);
+            QVERIFY(chat.acceptLiveChatId("chat"));
+            chat.m_streamGrpcError=-1;
+            chat.finishStream(new FakeReply(200,fixture(),"0,0"),chat.m_generation);
+            QVERIFY(chat.m_waitingToResume);
+            QCOMPARE(chat.m_retryTimer.interval(),250);
+            QCOMPARE(chat.m_notFoundRecoveries,i); // Success does not rearm an endless loop.
+        }
+        chat.m_streamGrpcError=-1;
+        chat.finishStream(new FakeReply(200,{},"5"),chat.m_generation);
+        QVERIFY(!chat.m_active); QVERIFY(!chat.m_retryTimer.isActive());
+        QCOMPARE(chat.m_notFoundRecoveries,2);
+    }
+    void refreshHonorsDelayAndChangedChatClearsDedupe() {
+        YouTubeChat chat; chat.m_active=true;
+        chat.setReconnectDelayMs(60000);
+        chat.m_resolvedVideoId="abcdefghijk"; chat.m_liveChatId="old-chat";
+        chat.m_seen.insert("old-message"); chat.m_seenOrder.enqueue("old-message");
+        chat.finishStream(new FakeReply(404,{}),chat.m_generation);
+        QVERIFY(chat.m_refreshingChat);
+        QCOMPARE(chat.m_retryTimer.interval(),60000);
+        chat.setReconnectDelayMs(250);
+        QCOMPARE(chat.m_retryTimer.interval(),60000); // Save cannot shorten recovery wait.
+        QVERIFY(chat.acceptLiveChatId("new-chat"));
+        QVERIFY(chat.m_seen.isEmpty()); QVERIFY(chat.m_seenOrder.isEmpty());
+        QCOMPARE(chat.m_liveChatId,QString("new-chat"));
+        chat.disconnect();
+        QVERIFY(!chat.m_refreshingChat); QVERIFY(!chat.m_retryTimer.isActive());
+    }
+    void endedLookupAndAuthDoNotLoop() {
+        for (int http : {401,403,404}) {
+            YouTubeChat chat; chat.m_active=true;
+            chat.m_refreshingChat=true; chat.m_notFoundRecoveries=1;
+            bool accepted=false;
+            auto *reply=new FakeReply(http,R"({"error":{"errors":[{"reason":"unavailable"}]}})");
+            chat.readJson(reply,chat.m_generation,[&](const QJsonObject &){accepted=true;});
+            reply->finished();
+            QVERIFY(!accepted); QVERIFY(!chat.m_active);
+            QVERIFY(!chat.m_retryTimer.isActive());
+            QVERIFY(!chat.m_refreshingChat);
+            QCOMPARE(chat.m_notFoundRecoveries,1);
+        }
+        YouTubeChat ended; ended.m_active=true; ended.m_refreshingChat=true;
+        QVERIFY(!ended.acceptLiveChatId({}));
+        QVERIFY(!ended.m_active); QVERIFY(!ended.m_retryTimer.isActive());
+        for (const auto &grpc : {"7","8","16","8,5","5,8","16,5"}) {
+            YouTubeChat chat; chat.m_active=true;
+            chat.m_resolvedVideoId="abcdefghijk"; chat.m_liveChatId="chat";
+            chat.finishStream(new FakeReply(200,{},grpc),chat.m_generation);
+            QVERIFY(!chat.m_active); QCOMPARE(chat.m_notFoundRecoveries,0);
+            QVERIFY(!chat.m_retryTimer.isActive());
+        }
+    }
+    void quotaObservationCannotBecomeNotFoundRecovery() {
+        YouTubeChat chat; chat.m_active=true;
+        chat.m_resolvedVideoId="abcdefghijk"; chat.m_liveChatId="chat";
+        auto *reply=new FakeReply(200,{},"8");
+        chat.observeGrpcStatus(reply);
+        reply->header("grpc-status","5");
+        chat.finishStream(reply,chat.m_generation);
+        QVERIFY(!chat.m_active); QCOMPARE(chat.m_notFoundRecoveries,0);
+        QVERIFY(!chat.m_retryTimer.isActive());
+    }
+    void cancelledRefreshIgnoresOldReply() {
+        YouTubeChat chat; chat.m_active=true; chat.m_resolvedVideoId="abcdefghijk";
+        chat.m_liveChatId="chat";
+        const auto oldGeneration=chat.m_generation;
+        chat.finishStream(new FakeReply(200,{},"5"),oldGeneration);
+        QVERIFY(chat.m_generation!=oldGeneration);
+        chat.disconnect();
+        chat.finishStream(new FakeReply(200,fixture(),"0"),oldGeneration);
+        QVERIFY(!chat.m_active); QVERIFY(!chat.m_retryTimer.isActive());
+        chat.m_notFoundRecoveries=2;
+        chat.connectToChannel({}, {}, {}); // A new manual session resets the budget even before validation.
+        QCOMPARE(chat.m_notFoundRecoveries,0);
+    }
     void duplicateStatusResumes() {
         for (const auto &value : {"0", "0, 0", "0,0,0", " 0 ,\t0 "}) {
             YouTubeChat chat; chat.m_active = true;
